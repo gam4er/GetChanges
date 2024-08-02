@@ -197,7 +197,7 @@ namespace Sharphound.Writers
             LdapConnection connection = InitializeConnection();
 
             var users = new List<SearchResultEntry>();
-            string schemaNamingContext = "OU=Accounts,OU=Clients,DC=avp,DC=ru";
+            string schemaNamingContext = "";
 
             if (schemaNamingContext == null)
             {

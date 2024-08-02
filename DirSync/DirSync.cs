@@ -30,7 +30,7 @@ namespace DirSync
 
                 // Create search request with DirSync control
                 string searchFilter = "(objectClass=*)";
-                SearchRequest searchRequest = new SearchRequest("DC=avp,DC=ru", searchFilter, SearchScope.Subtree, null);
+                SearchRequest searchRequest = new SearchRequest("", searchFilter, SearchScope.Subtree, null);
                 searchRequest.Controls.Add(dirSyncControl);
 
                 // Send search request and get response
