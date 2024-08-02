@@ -1,0 +1,65 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35122.118
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GCNet", "GCNet\GCNet.csproj", "{4E637AA7-DFAD-4015-90C4-857B51F81366}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DirSync", "DirSync\DirSync.csproj", "{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerializeToJSONLikeSharpHound", "SerializeToJSONLikeSharpHound\SerializeToJSONLikeSharpHound.csproj", "{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x64.Build.0 = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x86.Build.0 = Debug|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x64.ActiveCfg = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x64.Build.0 = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x86.ActiveCfg = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x86.Build.0 = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|x64.Build.0 = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|x86.Build.0 = Debug|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|x64.ActiveCfg = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|x64.Build.0 = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|x86.ActiveCfg = Release|Any CPU
+		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|x86.Build.0 = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|x64.Build.0 = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|x86.Build.0 = Debug|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|x64.ActiveCfg = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|x64.Build.0 = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|x86.ActiveCfg = Release|Any CPU
+		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3D85AFBE-1519-40E3-8A68-BFBA2EEB073D}
+	EndGlobalSection
+EndGlobal
