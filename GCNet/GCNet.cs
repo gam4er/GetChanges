@@ -5,10 +5,15 @@ using SharpHoundCommonLib.Processors;
 
 using System;
 using System.Collections.Generic;
+using System.DirectoryServices;
 using System.DirectoryServices.Protocols;
 using System.IO;
+using System.Linq;
 using System.Net.NetworkInformation;
 using System.Security.AccessControl;
+
+using SearchScope = System.DirectoryServices.Protocols.SearchScope;
+using SecurityMasks = System.DirectoryServices.Protocols.SecurityMasks;
 
 
 namespace GCNet
@@ -61,16 +66,16 @@ namespace GCNet
 
                 DirectoryControl LDAP_SERVER_SHOW_RECYCLED_OID = new DirectoryControl("1.2.840.113556.1.4.2064", null, true, true);
                 searchRequest.Controls.Add(LDAP_SERVER_SHOW_RECYCLED_OID);
-
+                /*
                 AsqRequestControl asqRequestControl = new AsqRequestControl();
                 asqRequestControl.IsCritical = true; 
                 asqRequestControl.ServerSide = true;
                 asqRequestControl.AttributeName = "telephoneNumber";
                 searchRequest.Controls.Add(asqRequestControl);
-
+                */
                 /*
                  * К сожалению ACL не приходит
-                 */
+                 
                 var ReturnACL = new SecurityDescriptorFlagControl
                 {
                     SecurityMasks = 
@@ -80,7 +85,7 @@ namespace GCNet
                     SecurityMasks.Sacl
                 };
                 searchRequest.Controls.Add(ReturnACL);
-
+                */
 
                 SearchOptionsControl searchOptions = new SearchOptionsControl(System.DirectoryServices.Protocols.SearchOption.PhantomRoot);
                 searchRequest.Controls.Add(searchOptions);
@@ -103,43 +108,65 @@ namespace GCNet
             {
                 LdapConnection connection = (LdapConnection)ar.AsyncState;
                 PartialResultsCollection response = connection.GetPartialResults(ar);
-                foreach (SearchResultEntry entry in response)
+                for (global::System.Int32 i = 0; i < response.Count; i++)
                 {
-                    SearchResultEntryWrapper wrapper = new SearchResultEntryWrapper(entry);
-                    ILdapUtils ldapUtils = new LdapUtils();
-                    LdapPropertyProcessor processor = new LdapPropertyProcessor(ldapUtils);                            
-                    Dictionary<string, object> properties = processor.ParseAllProperties(wrapper);
-                    UserProperties userProperties = processor.ReadUserProperties(wrapper, GetCurrentDomain()).Result;
-
-                    foreach (var p in userProperties.Props)                    
-                        properties.Add(p.Key, p.Value);
-
                     try
                     {
-                        properties ["usercertificate"] = new ParsedCertificate((byte [])entry.Attributes ["usercertificate"] [0] ?? new byte [] { });
-                    }
-                    catch (Exception e) { 
-                        Console.WriteLine(e.Message);
-                    }
+                        SearchResultEntry entry = (SearchResultEntry)response [i];
 
-                    try
-                    {
-                        if (entry.Attributes.Contains("msexchmailboxsecuritydescriptor"))
+                        var odistinguishedName = entry.DistinguishedName ;
+                        string [] oClass = new string [] { };
+                        oClass = Array.ConvertAll(entry.Attributes ["objectClass"]?.GetValues("".GetType()), x => x.ToString());
+                        
+                        if (!(oClass.Contains("gPLink") ||
+                            odistinguishedName.Contains("CN=Policies")/* ||
+                        oClassAsString.Contains("user")*/ ))
+                            continue;
+                        SearchResultEntryWrapper wrapper = new SearchResultEntryWrapper(entry);
+                        ILdapUtils ldapUtils = new LdapUtils();
+                        LdapPropertyProcessor processor = new LdapPropertyProcessor(ldapUtils);
+                        Dictionary<string, object> properties = processor.ParseAllProperties(wrapper);
+                        UserProperties userProperties = processor.ReadUserProperties(wrapper, GetCurrentDomain()).Result;
+
+                        foreach (var p in userProperties.Props)
+                            properties.Add(p.Key, p.Value);
+
+                        try
                         {
-                            RawSecurityDescriptor rawSecurityDescriptor = new RawSecurityDescriptor((byte [])entry.Attributes ["msexchmailboxsecuritydescriptor"] [0] ?? new byte [] { }, 0);
-                            string sddlString = rawSecurityDescriptor.GetSddlForm(AccessControlSections.All);
-                            properties ["msexchmailboxsecuritydescriptor"] = sddlString;
+                            properties ["usercertificate"] = new ParsedCertificate((byte [])(entry.Attributes ["usercertificate"] ?? (new DirectoryAttribute())) [0] ?? new byte [] { });
                         }
+                        catch (NullReferenceException e)
+                        {
+                            Console.WriteLine(e.Message);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e.Message);
+                        }
+
+                        try
+                        {
+                            if (entry.Attributes.Contains("msexchmailboxsecuritydescriptor"))
+                            {
+                                RawSecurityDescriptor rawSecurityDescriptor = new RawSecurityDescriptor((byte [])entry.Attributes ["msexchmailboxsecuritydescriptor"] [0] ?? new byte [] { }, 0);
+                                string sddlString = rawSecurityDescriptor.GetSddlForm(AccessControlSections.All);
+                                properties ["msexchmailboxsecuritydescriptor"] = sddlString;
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e.Message);
+                        }
+
+                        properties.Remove("thumbnailphoto");
+
+                        //Console.WriteLine(JsonConvert.SerializeObject(properties, Newtonsoft.Json.Formatting.Indented));
+                        File.AppendAllText("result.json", JsonConvert.SerializeObject(properties, Newtonsoft.Json.Formatting.Indented));
                     }
-                    catch (Exception e)
+                    catch (Exception ex)
                     {
-                        Console.WriteLine(e.Message);
+                        Console.WriteLine("Error in enumerating callback object {0}:\n" + ex.Message, i);
                     }
-
-                    properties.Remove("thumbnailphoto");
-
-                    //Console.WriteLine(JsonConvert.SerializeObject(properties, Newtonsoft.Json.Formatting.Indented));
-                    File.AppendAllText("result.json", JsonConvert.SerializeObject(properties, Newtonsoft.Json.Formatting.Indented));
                 }
             }
             catch (Exception e)
@@ -148,12 +175,33 @@ namespace GCNet
             }
         }
 
+        public static string GetBaseDN()
+        {
+            try
+            {
+                // Создаем объект DirectoryEntry с пустым конструктором для получения корневого контекста домена
+                using (DirectoryEntry rootDSE = new DirectoryEntry("LDAP://RootDSE"))
+                {
+                    // Получаем значение свойства defaultNamingContext, которое содержит базовый DN домена
+                    string baseDN = rootDSE.Properties ["defaultNamingContext"].Value.ToString();
+                    return baseDN;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Обработка ошибок
+                Console.WriteLine("An error occurred: " + ex.Message);
+                return null;
+            }
+        }
+
         static void Main(string [] args)
         {
             LdapConnection connection = LDAPSearches.InitializeConnection();
             attributeDictionary = LDAPSearches.GetAllAttributes(connection);
             string searchBaseDN = LDAPSearches.GetUserOU();
-            GetChangeNotifications(searchBaseDN, connection);
+            string baseDN = GetBaseDN();
+            GetChangeNotifications(/*searchBaseDN*/baseDN, connection);
         }
     }
 }
