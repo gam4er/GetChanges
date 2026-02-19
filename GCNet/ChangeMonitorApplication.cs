@@ -22,12 +22,6 @@ namespace GCNet
             using (var connection = LDAPSearches.InitializeConnection())
             {
                 var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn() : options.BaseDn;
-                var filters = FilterLoader.Load(options.FiltersFile);
-                if (filters.Count == 0)
-                {
-                    Console.WriteLine("No LDAP filters were found in the provided file.");
-                    return 1;
-                }
 
                 var trackedAttributes = ParseTrackedAttributes(options.TrackedAttributes);
                 if (trackedAttributes.Count > 0)
@@ -56,10 +50,7 @@ namespace GCNet
                         }
                     }, tokenSource.Token);
 
-                    foreach (var filter in filters)
-                    {
-                        StartNotification(baseDn, filter, connection, pipeline.Incoming);
-                    }
+                    StartNotification(baseDn, connection, pipeline.Incoming);
 
                     Console.WriteLine("Monitoring started. Press ENTER to stop.");
                     Console.ReadLine();
@@ -96,9 +87,8 @@ namespace GCNet
                 .ToList();
         }
 
-        private void StartNotification(string baseDn, string filter, LdapConnection connection, BlockingCollection<ChangeEvent> target)
+        private void StartNotification(string baseDn, LdapConnection connection, BlockingCollection<ChangeEvent> target)
         {
-            //var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
             var request = new SearchRequest(baseDn, "(objectClass=*)", System.DirectoryServices.Protocols.SearchScope.Subtree, null);
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
 
@@ -172,9 +162,10 @@ namespace GCNet
                     }
 
                     var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var properties = ParseEntry(entry);
                     foreach (var attr in trackedAttributes)
                     {
-                        snapshot[attr] = SerializeAttribute(entry, attr);
+                        snapshot[attr] = CanonicalizeAttribute(properties, attr);
                     }
 
                     _baseline[guid.Value] = new BaselineEntry
@@ -197,27 +188,25 @@ namespace GCNet
             Console.WriteLine("Loaded baseline for objects: " + _baseline.Count);
         }
 
-        private static string SerializeAttribute(SearchResultEntry entry, string attr)
+        private static string CanonicalizeAttribute(Dictionary<string, object> properties, string attribute)
         {
-            if (!entry.Attributes.Contains(attr))
+            if (!properties.TryGetValue(attribute, out var value))
+            {
+                var actualKey = properties.Keys.FirstOrDefault(k => string.Equals(k, attribute, StringComparison.OrdinalIgnoreCase));
+                if (actualKey == null)
+                {
+                    return "null";
+                }
+
+                value = properties[actualKey];
+            }
+
+            if (value == null)
             {
                 return "null";
             }
 
-            var values = new List<string>();
-            foreach (var value in entry.Attributes[attr])
-            {
-                if (value is byte[] bytes)
-                {
-                    values.Add(Convert.ToBase64String(bytes));
-                }
-                else
-                {
-                    values.Add(value?.ToString());
-                }
-            }
-
-            return JsonConvert.SerializeObject(values);
+            return JsonConvert.SerializeObject(value);
         }
 
         private static Guid? ReadObjectGuid(SearchResultEntry entry)
