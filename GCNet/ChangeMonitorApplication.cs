@@ -65,8 +65,9 @@ namespace GCNet
                     {
                         Task.WaitAll(new[] { worker, writerTask }, TimeSpan.FromSeconds(5));
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Console.WriteLine(ex.Message);
                     }
                 }
             }
@@ -252,8 +253,9 @@ namespace GCNet
                     properties["usercertificate"] = new ParsedCertificate((byte[])(entry.Attributes["usercertificate"][0] ?? new byte[] { }));
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine("usercertificate parsing error" + ex.Message);
             }
 
             try
@@ -264,8 +266,9 @@ namespace GCNet
                     properties["msexchmailboxsecuritydescriptor"] = rawSecurityDescriptor.GetSddlForm(AccessControlSections.All);
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine("msexchmailboxsecuritydescriptor parsing error" + ex.Message);
             }
 
             properties.Remove("thumbnailphoto");
