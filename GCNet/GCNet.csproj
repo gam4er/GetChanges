@@ -36,6 +36,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    
+    <Reference Include="CommandLine, Version=2.9.1.0, Culture=neutral, PublicKeyToken=886e4cc9e24a15d9, processorArchitecture=MSIL">
+      <HintPath>..\packages\CommandLineParser.2.9.1\lib\net45\CommandLine.dll</HintPath>
+    </Reference>
     <Reference Include="Costura, Version=5.7.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Costura.Fody.5.7.0\lib\netstandard1.0\Costura.dll</HintPath>
     </Reference>
@@ -209,13 +213,21 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="GCNet.cs" />
+    <Compile Include="ChangeModels.cs" />
+    <Compile Include="ChangeMonitorApplication.cs" />
+    <Compile Include="ChangeProcessingPipeline.cs" />
+    <Compile Include="FilterLoader.cs" />
+    <Compile Include="JsonArrayFileWriter.cs" />
     <Compile Include="LDAPSearches.cs" />
+    <Compile Include="MetadataEnricher.cs" />
+    <Compile Include="Options.cs" />
+    <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="filters\default-ldap-filters.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpHoundCommon\src\CommonLib\SharpHoundCommonLib.csproj">
