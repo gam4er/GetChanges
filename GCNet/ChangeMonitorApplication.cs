@@ -35,7 +35,7 @@ namespace GCNet
                     LoadBaseline(connection, baseDn, trackedAttributes);
                 }
 
-                var metadataEnricher = new MetadataEnricher(connection);
+                MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
                 var tokenSource = new CancellationTokenSource();
 
@@ -93,7 +93,6 @@ namespace GCNet
         {
             var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
-            request.Controls.Add(new SearchOptionsControl(SearchOption.PhantomRoot));
 
             AsyncCallback callback = ar =>
             {
@@ -128,7 +127,7 @@ namespace GCNet
                 }
             };
 
-            connection.BeginSendRequest(request, TimeSpan.FromMinutes(10), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
+            connection.BeginSendRequest(request, PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
         }
 
         private void LoadBaseline(LdapConnection connection, string baseDn, IReadOnlyCollection<string> trackedAttributes)
