@@ -44,9 +44,15 @@ namespace GCNet
                     var worker = pipeline.StartAsync(tokenSource.Token);
                     var writerTask = Task.Run(() =>
                     {
-                        foreach (var item in pipeline.Outgoing.GetConsumingEnumerable(tokenSource.Token))
+                        try
                         {
-                            writer.WriteObject(item);
+                            foreach (var item in pipeline.Outgoing.GetConsumingEnumerable(tokenSource.Token))
+                            {
+                                writer.WriteObject(item);
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
                         }
                     }, tokenSource.Token);
 
@@ -250,7 +256,16 @@ namespace GCNet
             {
                 if (entry.Attributes.Contains("usercertificate"))
                 {
-                    properties["usercertificate"] = new ParsedCertificate((byte[])(entry.Attributes["usercertificate"][0] ?? new byte[] { }));
+                    var certificates = new List<ParsedCertificate>();
+                    foreach (var certificateValue in entry.Attributes["usercertificate"])
+                    {
+                        if (certificateValue is byte[] certificateBytes)
+                        {
+                            certificates.Add(new ParsedCertificate(certificateBytes));
+                        }
+                    }
+
+                    properties["usercertificate"] = certificates;
                 }
             }
             catch (Exception ex)
