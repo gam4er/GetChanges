@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -55,6 +56,9 @@ namespace GCNet
                         _outgoing.Add(item.Properties, token);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                }
                 finally
                 {
                     _outgoing.CompleteAdding();
@@ -78,14 +82,50 @@ namespace GCNet
             if (!_baseline.TryGetValue(guid, out var existing))
             {
                 _baseline[guid] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
+                AddTrackedAttributeDiff(changeEvent.Properties, null, snapshot);
                 return true;
             }
 
             var changed = _trackedAttributes.Any(a => !string.Equals(existing.Attributes.ContainsKey(a) ? existing.Attributes[a] : null, snapshot[a], StringComparison.Ordinal));
+            AddTrackedAttributeDiff(changeEvent.Properties, existing.Attributes, snapshot);
             _baseline[guid] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
             return changed;
         }
 
+
+        private void AddTrackedAttributeDiff(Dictionary<string, object> properties, Dictionary<string, string> previousSnapshot, Dictionary<string, string> currentSnapshot)
+        {
+            foreach (var attribute in _trackedAttributes)
+            {
+                var previousValue = previousSnapshot != null && previousSnapshot.ContainsKey(attribute)
+                    ? previousSnapshot[attribute]
+                    : "null";
+
+                properties[attribute + "_old"] = DeserializeCanonical(previousValue);
+                properties[attribute + "_new"] = DeserializeCanonical(currentSnapshot[attribute]);
+            }
+        }
+
+        private static object DeserializeCanonical(string canonical)
+        {
+            if (string.IsNullOrWhiteSpace(canonical))
+            {
+                return null;
+            }
+
+            var token = JToken.Parse(canonical);
+            if (token.Type == JTokenType.Array)
+            {
+                return token.ToObject<List<object>>();
+            }
+
+            if (token.Type == JTokenType.Null)
+            {
+                return null;
+            }
+
+            return token.ToObject<object>();
+        }
         private static string Canonicalize(Dictionary<string, object> properties, string attribute)
         {
             if (!properties.TryGetValue(attribute, out var value) || value == null)
