@@ -218,7 +218,6 @@
     <Compile Include="ChangeModels.cs" />
     <Compile Include="ChangeMonitorApplication.cs" />
     <Compile Include="ChangeProcessingPipeline.cs" />
-    <Compile Include="FilterLoader.cs" />
     <Compile Include="JsonArrayFileWriter.cs" />
     <Compile Include="LDAPSearches.cs" />
     <Compile Include="MetadataEnricher.cs" />
@@ -229,9 +228,6 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
-    <None Include="filters\default-ldap-filters.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpHoundCommon\src\CommonLib\SharpHoundCommonLib.csproj">
