@@ -128,7 +128,18 @@ namespace GCNet
         }
         private static string Canonicalize(Dictionary<string, object> properties, string attribute)
         {
-            if (!properties.TryGetValue(attribute, out var value) || value == null)
+            if (!properties.TryGetValue(attribute, out var value))
+            {
+                var actualKey = properties.Keys.FirstOrDefault(k => string.Equals(k, attribute, StringComparison.OrdinalIgnoreCase));
+                if (actualKey == null)
+                {
+                    return "null";
+                }
+
+                value = properties[actualKey];
+            }
+
+            if (value == null)
             {
                 return "null";
             }
