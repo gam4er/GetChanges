@@ -91,8 +91,23 @@ namespace GCNet
 
         private void StartNotification(string baseDn, string filter, LdapConnection connection, BlockingCollection<ChangeEvent> target)
         {
-            var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
+            //var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
+            var request = new SearchRequest(baseDn, "(objectClass=*)", System.DirectoryServices.Protocols.SearchScope.Subtree, null);
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
+
+            DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
+            request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
+
+            DirectoryControl LDAP_SERVER_SHOW_DELETED_OID = new DirectoryControl("1.2.840.113556.1.4.417", null, true, true);
+            request.Controls.Add(LDAP_SERVER_SHOW_DELETED_OID);
+
+
+            DirectoryControl LDAP_SERVER_SHOW_RECYCLED_OID = new DirectoryControl("1.2.840.113556.1.4.2064", null, true, true);
+            request.Controls.Add(LDAP_SERVER_SHOW_RECYCLED_OID);
+
+            SearchOptionsControl searchOptions = new SearchOptionsControl(SearchOption.PhantomRoot);
+            request.Controls.Add(searchOptions);
+
 
             AsyncCallback callback = ar =>
             {
@@ -127,7 +142,7 @@ namespace GCNet
                 }
             };
 
-            connection.BeginSendRequest(request, PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
+            connection.BeginSendRequest(request, TimeSpan.FromSeconds(60 * 10), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
         }
 
         private void LoadBaseline(LdapConnection connection, string baseDn, IReadOnlyCollection<string> trackedAttributes)
