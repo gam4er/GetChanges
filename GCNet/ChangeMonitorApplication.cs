@@ -89,7 +89,12 @@ namespace GCNet
 
         private void StartNotification(string baseDn, LdapConnection connection, BlockingCollection<ChangeEvent> target)
         {
-            var request = new SearchRequest(baseDn, "(objectClass=*)", System.DirectoryServices.Protocols.SearchScope.Subtree, null);
+            var request = new SearchRequest(
+                baseDn,
+                "(objectClass=*)",
+                System.DirectoryServices.Protocols.SearchScope.Subtree,
+                "*",
+                "objectGUID");
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
 
             DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
