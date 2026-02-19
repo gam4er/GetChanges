@@ -16,6 +16,7 @@ namespace GCNet
         private readonly HashSet<string> _trackedAttributes;
         private readonly bool _enrichMetadata;
         private readonly MetadataEnricher _metadataEnricher;
+        private readonly Func<ChangeEvent, bool> _shouldWrite;
 
         public ChangeProcessingPipeline(ConcurrentDictionary<Guid, BaselineEntry> baseline, IEnumerable<string> trackedAttributes, bool enrichMetadata, MetadataEnricher metadataEnricher)
         {
@@ -23,6 +24,9 @@ namespace GCNet
             _trackedAttributes = new HashSet<string>(trackedAttributes ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
             _enrichMetadata = enrichMetadata;
             _metadataEnricher = metadataEnricher;
+            _shouldWrite = _trackedAttributes.Count == 0
+                ? (Func<ChangeEvent, bool>)(_ => true)
+                : ShouldWriteWhenTrackedAttributesChanged;
         }
 
         public BlockingCollection<ChangeEvent> Incoming => _incoming;
@@ -36,7 +40,12 @@ namespace GCNet
                 {
                     foreach (var item in _incoming.GetConsumingEnumerable(token))
                     {
-                        var shouldEnrich = _enrichMetadata && ShouldEnrich(item);
+                        if (!_shouldWrite(item))
+                        {
+                            continue;
+                        }
+
+                        var shouldEnrich = _enrichMetadata && _metadataEnricher != null;
                         if (shouldEnrich)
                         {
                             var metadata = _metadataEnricher.LoadMetadata(item.DistinguishedName);
@@ -53,13 +62,8 @@ namespace GCNet
             }, token);
         }
 
-        private bool ShouldEnrich(ChangeEvent changeEvent)
+        private bool ShouldWriteWhenTrackedAttributesChanged(ChangeEvent changeEvent)
         {
-            if (_trackedAttributes.Count == 0)
-            {
-                return true;
-            }
-
             if (!changeEvent.ObjectGuid.HasValue)
             {
                 return true;
