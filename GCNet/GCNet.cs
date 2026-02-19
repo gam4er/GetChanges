@@ -3,7 +3,7 @@ using System;
 
 namespace GCNet
 {
-    internal static class Program
+    internal static class GCNet
     {
         private static int Main(string[] args)
         {

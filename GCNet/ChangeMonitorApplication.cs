@@ -91,7 +91,7 @@ namespace GCNet
 
         private void StartNotification(string baseDn, string filter, LdapConnection connection, BlockingCollection<ChangeEvent> target)
         {
-            var request = new SearchRequest(baseDn, filter, SearchScope.Subtree, null);
+            var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
             request.Controls.Add(new SearchOptionsControl(SearchOption.PhantomRoot));
 
@@ -136,7 +136,7 @@ namespace GCNet
             var filter = "(|" + string.Join(string.Empty, trackedAttributes.Select(a => "(" + a + "=*)")) + ")";
             var attributes = new List<string> { "objectGUID", "distinguishedName" };
             attributes.AddRange(trackedAttributes);
-            var request = new SearchRequest(baseDn, filter, SearchScope.Subtree, attributes.ToArray());
+            var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, attributes.ToArray());
             request.Controls.Add(new PageResultRequestControl(1000));
 
             while (true)

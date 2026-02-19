@@ -60,7 +60,7 @@ namespace GCNet
         public void Dispose()
         {
             Complete();
-            _jsonWriter.Dispose();
+            _jsonWriter.Close();
             _streamWriter.Dispose();
         }
     }
