@@ -26,7 +26,7 @@ namespace GCNet
 
         public int Run(Options options)
         {
-            var connectionFactory = new Func<LdapConnection>(LDAPSearches.InitializeConnection);
+            var connectionFactory = new Func<LdapConnection>(LDAPSearches.CreateBoundConnection);
             var connection = connectionFactory();
             try
             {
@@ -135,73 +135,30 @@ namespace GCNet
             while (!cancellationToken.IsCancellationRequested)
             {
                 LdapConnection sessionConnection = null;
+                NotificationSubscription subscription = null;
+                var restartSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
                 try
                 {
                     AppConsole.Log("connect: creating LDAP notification session");
                     sessionConnection = connectionFactory();
 
                     var request = BuildNotificationRequest(baseDn, usePhantomRoot);
-                    var restartSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-                    AsyncCallback callback = ar =>
-                    {
-                        try
-                        {
-                            var partialResults = sessionConnection.GetPartialResults(ar);
-                            for (int i = 0; i < partialResults.Count; i++)
-                            {
-                                if (cancellationToken.IsCancellationRequested)
-                                {
-                                    return;
-                                }
-
-                                var entry = partialResults[i] as SearchResultEntry;
-                                if (entry == null)
-                                {
-                                    continue;
-                                }
-
-                                var entryDn = (entry.DistinguishedName ?? string.Empty).ToLowerInvariant();
-                                if (ShouldIgnoreByDn(entryDn, dnIgnoreFilters))
-                                {
-                                    continue;
-                                }
-
-                                var properties = ParseEntry(entry);
-                                if (properties == null)
-                                {
-                                    continue;
-                                }
-
-                                target.Add(new ChangeEvent
-                                {
-                                    DistinguishedName = entry.DistinguishedName,
-                                    ObjectGuid = ReadObjectGuid(entry),
-                                    Properties = properties
-                                }, cancellationToken);
-
-                                var totalNotifications = Interlocked.Increment(ref _notificationCount);
-                                AppConsole.LiveCounter("Notifications received total", totalNotifications);
-                            }
-                        }
-                        catch (Exception ex) when (IsRecoverableNotificationException(ex))
+                    subscription = new NotificationSubscription(
+                        sessionConnection,
+                        request,
+                        target,
+                        dnIgnoreFilters,
+                        cancellationToken,
+                        OnNotificationReceived,
+                        ex =>
                         {
                             AppConsole.WriteException(ex, "callback-fail: recoverable LDAP notification error." + BuildLdapDiagnostics(ex));
                             restartSignal.TrySetResult(true);
-                        }
-                        catch (Exception ex)
-                        {
-                            AppConsole.WriteException(ex, "Callback error while processing LDAP notifications." + BuildLdapDiagnostics(ex));
-                        }
-                    };
+                        });
 
                     AppConsole.Log("subscribe: starting LDAP change notification subscription");
-                    sessionConnection.BeginSendRequest(
-                        request,
-                        TimeSpan.FromDays(1),
-                        PartialResultProcessing.ReturnPartialResultsAndNotifyCallback,
-                        callback,
-                        sessionConnection);
+                    subscription.Start();
 
                     AppConsole.Log("reconnect-success: LDAP notification session is active");
                     attempt = 0;
@@ -214,6 +171,7 @@ namespace GCNet
                 }
                 finally
                 {
+                    subscription?.Dispose();
                     sessionConnection?.Dispose();
                 }
 
@@ -232,6 +190,128 @@ namespace GCNet
                 catch (OperationCanceledException)
                 {
                     break;
+                }
+            }
+        }
+
+        private void OnNotificationReceived()
+        {
+            var totalNotifications = Interlocked.Increment(ref _notificationCount);
+            AppConsole.LiveCounter("Notifications received total", totalNotifications);
+        }
+
+        private sealed class NotificationSubscription : IDisposable
+        {
+            private readonly LdapConnection _connection;
+            private readonly SearchRequest _request;
+            private readonly BlockingCollection<ChangeEvent> _target;
+            private readonly IReadOnlyCollection<string> _dnIgnoreFilters;
+            private readonly CancellationToken _cancellationToken;
+            private readonly Action _onNotificationReceived;
+            private readonly Action<Exception> _onError;
+            private IAsyncResult _asyncResult;
+            private int _stopped;
+
+            public NotificationSubscription(
+                LdapConnection connection,
+                SearchRequest request,
+                BlockingCollection<ChangeEvent> target,
+                IReadOnlyCollection<string> dnIgnoreFilters,
+                CancellationToken cancellationToken,
+                Action onNotificationReceived,
+                Action<Exception> onError)
+            {
+                _connection = connection;
+                _request = request;
+                _target = target;
+                _dnIgnoreFilters = dnIgnoreFilters;
+                _cancellationToken = cancellationToken;
+                _onNotificationReceived = onNotificationReceived;
+                _onError = onError;
+            }
+
+            public void Start()
+            {
+                _asyncResult = _connection.BeginSendRequest(
+                    _request,
+                    TimeSpan.FromDays(1),
+                    PartialResultProcessing.ReturnPartialResultsAndNotifyCallback,
+                    OnPartialResults,
+                    _connection);
+            }
+
+            public void Stop()
+            {
+                if (Interlocked.Exchange(ref _stopped, 1) == 1)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (_asyncResult != null)
+                    {
+                        _connection.Abort(_asyncResult);
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            public void Dispose()
+            {
+                Stop();
+            }
+
+            private void OnPartialResults(IAsyncResult ar)
+            {
+                if (Volatile.Read(ref _stopped) == 1 || _cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    var partialResults = _connection.GetPartialResults(ar);
+                    for (int i = 0; i < partialResults.Count; i++)
+                    {
+                        if (_cancellationToken.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
+                        var entry = partialResults[i] as SearchResultEntry;
+                        if (entry == null)
+                        {
+                            continue;
+                        }
+
+                        var entryDn = (entry.DistinguishedName ?? string.Empty).ToLowerInvariant();
+                        if (ShouldIgnoreByDn(entryDn, _dnIgnoreFilters))
+                        {
+                            continue;
+                        }
+
+                        var properties = ParseEntry(entry);
+                        if (properties == null)
+                        {
+                            continue;
+                        }
+
+                        _target.Add(new ChangeEvent
+                        {
+                            DistinguishedName = entry.DistinguishedName,
+                            ObjectGuid = ReadObjectGuid(entry),
+                            Properties = properties
+                        }, _cancellationToken);
+
+                        _onNotificationReceived();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _onError(ex);
                 }
             }
         }

@@ -9,6 +9,11 @@ namespace GCNet
 {
     internal class LDAPSearches
     {
+        public static LdapConnection CreateBoundConnection()
+        {
+            return InitializeConnection();
+        }
+
         public static string GetSchemaNamingContext(LdapConnection ldapConnection)
         {
             try
