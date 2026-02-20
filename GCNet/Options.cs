@@ -4,6 +4,8 @@ namespace GCNet
 {
     internal class Options
     {
+        public const string DefaultDnIgnoreListPath = "dn-ignore-default.txt";
+
         [Option('o', "output", Required = false, Default = "result.json", HelpText = "Output JSON file path.")]
         public string OutputPath { get; set; }
 
@@ -16,7 +18,7 @@ namespace GCNet
         [Option("tracked-attributes", Required = false, HelpText = "Comma-separated attribute names. Metadata enrichment is executed only when these attributes are changed.")]
         public string TrackedAttributes { get; set; }
 
-        [Option("dn-ignore-list", Required = false, Default = "dn-ignore-default.txt", HelpText = "Path to a file with DN filters to ignore (one per line).")]
+        [Option("dn-ignore-list", Required = false, Default = DefaultDnIgnoreListPath, HelpText = "Path to a file with DN filters to ignore (one per line).")]
         public string DnIgnoreListPath { get; set; }
     }
 }
