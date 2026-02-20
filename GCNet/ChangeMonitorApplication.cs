@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.Protocols;
+using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
 using System.Threading;
@@ -22,6 +23,8 @@ namespace GCNet
             using (var connection = LDAPSearches.InitializeConnection())
             {
                 var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn() : options.BaseDn;
+                var dnIgnoreFilters = LoadDnIgnoreFilters(options.DnIgnoreListPath);
+                Console.WriteLine("Loaded DN ignore filters: " + dnIgnoreFilters.Count + " from " + options.DnIgnoreListPath);
 
                 var trackedAttributes = ParseTrackedAttributes(options.TrackedAttributes);
                 if (trackedAttributes.Count > 0)
@@ -50,7 +53,7 @@ namespace GCNet
                         }
                     }, tokenSource.Token);
 
-                    StartNotification(baseDn, connection, pipeline.Incoming);
+                    StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters);
 
                     Console.WriteLine("Monitoring started. Press ENTER to stop.");
                     Console.ReadLine();
@@ -87,7 +90,11 @@ namespace GCNet
                 .ToList();
         }
 
-        private void StartNotification(string baseDn, LdapConnection connection, BlockingCollection<ChangeEvent> target)
+        private void StartNotification(
+            string baseDn,
+            LdapConnection connection,
+            BlockingCollection<ChangeEvent> target,
+            IReadOnlyCollection<string> dnIgnoreFilters)
         {
             var request = new SearchRequest(
                 baseDn,
@@ -124,6 +131,12 @@ namespace GCNet
                             continue;
                         }
 
+                        var entryDn = (entry.DistinguishedName ?? string.Empty).ToLowerInvariant();
+                        if (ShouldIgnoreByDn(entryDn, dnIgnoreFilters))
+                        {
+                            continue;
+                        }
+
                         var properties = ParseEntry(entry);
                         if (properties == null)
                         {
@@ -145,6 +158,37 @@ namespace GCNet
             };
 
             connection.BeginSendRequest(request, TimeSpan.FromSeconds(60 * 10), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
+        }
+
+        private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)
+        {
+            var targetPath = string.IsNullOrWhiteSpace(path) ? "dn-ignore-default.txt" : path;
+
+            if (!File.Exists(targetPath))
+            {
+                File.WriteAllText(targetPath, "# DN filters to ignore, one per line" + Environment.NewLine);
+                Console.WriteLine("DN ignore list file was not found and has been created: " + targetPath);
+                return Array.Empty<string>();
+            }
+
+            return File
+                .ReadLines(targetPath)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Where(x => !x.StartsWith("#", StringComparison.Ordinal))
+                .Select(x => x.ToLowerInvariant())
+                .Distinct()
+                .ToArray();
+        }
+
+        private static bool ShouldIgnoreByDn(string dn, IReadOnlyCollection<string> filters)
+        {
+            if (string.IsNullOrWhiteSpace(dn) || filters == null || filters.Count == 0)
+            {
+                return false;
+            }
+
+            return filters.Any(filter => dn.Contains(filter));
         }
 
         private void LoadBaseline(LdapConnection connection, string baseDn, IReadOnlyCollection<string> trackedAttributes)
