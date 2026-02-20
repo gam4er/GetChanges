@@ -26,7 +26,8 @@ namespace GCNet
 
         public int Run(Options options)
         {
-            var connectionFactory = new Func<LdapConnection>(LDAPSearches.CreateBoundConnection);
+            ValidateDomainControllerOptions(options);
+            var connectionFactory = new Func<LdapConnection>(() => LDAPSearches.CreateBoundConnection(options));
             var connection = connectionFactory();
             try
             {
@@ -105,6 +106,25 @@ namespace GCNet
             }
 
             return 0;
+        }
+
+        private static void ValidateDomainControllerOptions(Options options)
+        {
+            var mode = (options.DomainControllerSelectionMode ?? "auto").Trim().ToLowerInvariant();
+            if (mode != "auto" && mode != "manual")
+            {
+                throw new ArgumentException("Invalid --dc-selection value. Supported values: auto, manual.");
+            }
+
+            if (mode == "manual" && string.IsNullOrWhiteSpace(options.DomainController))
+            {
+                throw new ArgumentException("--dc is required when --dc-selection=manual.");
+            }
+
+            if (mode == "auto" && !string.IsNullOrWhiteSpace(options.DomainController))
+            {
+                AppConsole.Log("dc-selection: auto mode with explicit --dc fallback configured.");
+            }
         }
 
         private static List<string> ParseTrackedAttributes(string tracked)
