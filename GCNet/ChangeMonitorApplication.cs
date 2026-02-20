@@ -60,6 +60,8 @@ namespace GCNet
                 {
                     var worker = pipeline.StartAsync(lifecycle.Token);
                     var writerTask = StartWriterLoop(pipeline, writer, lifecycle.Token);
+                    // Notification loop owns reconnect with capped exponential backoff + jitter,
+                    // so the host starts it once and lets the loop self-heal transient LDAP failures.
                     var notificationLoopTask = _notificationLoopService.RunAsync(
                         BuildNotificationLoopContext(baseDn, connectionFactory, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot),
                         lifecycle.Token);
@@ -67,6 +69,8 @@ namespace GCNet
                     lifecycle.WaitForStopSignal();
                     lifecycle.RequestStop();
 
+                    // Shutdown is cooperative first (cancel token), then bounded waits prevent a stuck LDAP callback
+                    // from hanging process termination forever.
                     lifecycle.WaitForTask(notificationLoopTask, TimeSpan.FromSeconds(5), "Error while shutting down notification loop.");
                     pipeline.Incoming.CompleteAdding();
                     lifecycle.WaitForTasks(new[] { worker, writerTask }, TimeSpan.FromSeconds(5), "Error while shutting down worker tasks.");
@@ -168,6 +172,8 @@ namespace GCNet
                 .Select(x => x.Trim())
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Where(x => !x.StartsWith("#", StringComparison.Ordinal))
+                // DN matching in the callback is case-insensitive substring; normalizing here keeps filter behavior
+                // deterministic regardless of how admins format OUs/CNs in the ignore file.
                 .Select(x => x.ToLowerInvariant())
                 .Distinct()
                 .ToArray();

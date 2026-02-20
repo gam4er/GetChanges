@@ -34,21 +34,37 @@ namespace GCNet
         private static readonly ILdapConnectionFactory ConnectionFactory = new LdapConnectionFactory(DomainControllerSelector);
         private static readonly ILdapSchemaHelper SchemaHelper = new LdapSchemaHelper();
 
+        /// <summary>
+        /// Creates and binds an LDAP connection to the currently preferred domain controller so callers share
+        /// one consistent DC-selection policy for all read/monitoring operations.
+        /// </summary>
         public static LdapConnection CreateBoundConnection(Options options)
         {
             return ConnectionFactory.CreateBoundConnection(options);
         }
 
+        /// <summary>
+        /// Reads schemaNamingContext from RootDSE using an existing connection to avoid deriving schema DN from
+        /// assumptions that can break in multi-domain/forest deployments.
+        /// </summary>
         public static string GetSchemaNamingContext(LdapConnection ldapConnection)
         {
             return SchemaHelper.GetSchemaNamingContext(ldapConnection);
         }
 
+        /// <summary>
+        /// Loads LDAP attribute schema metadata keyed by lDAPDisplayName so value parsers can interpret attribute
+        /// payloads consistently across notification and snapshot paths.
+        /// </summary>
         public static Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
         {
             return SchemaHelper.GetAllAttributes(ldapConnection);
         }
 
+        /// <summary>
+        /// Returns the distinguished name of the current user container; used as a pragmatic default scope when
+        /// operators do not provide an explicit search base.
+        /// </summary>
         public static string GetUserOU()
         {
             var user = UserPrincipal.Current;
@@ -57,6 +73,10 @@ namespace GCNet
             return deUserContainer.Properties["distinguishedName"].Value.ToString();
         }
 
+        /// <summary>
+        /// Selects the most suitable domain controller and explains why it was chosen, so connection setup and
+        /// failover logging remain transparent and deterministic.
+        /// </summary>
         public static string SelectBestDomainController(Options options, out string reason)
         {
             return DomainControllerSelector.SelectBestDomainController(options, out reason);
@@ -268,6 +288,8 @@ namespace GCNet
             }
 
             var localSite = GetLocalSiteName();
+            // Strategy: prefer healthy low-latency DCs (optionally local site first), but keep full ordered list
+            // for round-robin failover so repeated reconnects do not hammer a single controller.
             var ordered = healthy
                 .OrderBy(x => options.PreferSiteLocal
                               && !string.IsNullOrWhiteSpace(localSite)

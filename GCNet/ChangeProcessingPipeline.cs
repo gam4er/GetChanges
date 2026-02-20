@@ -70,6 +70,8 @@ namespace GCNet
         {
             var snapshot = _trackedAttributes.ToDictionary(
                 a => a,
+                // We compare canonical JSON strings so multi-valued attributes and objects are diffed by value
+                // (stable serialized form), not by runtime type/casing quirks from LDAP parser output.
                 a => Canonicalize(changeEvent.Properties, a),
                 StringComparer.OrdinalIgnoreCase);
 
@@ -103,6 +105,8 @@ namespace GCNet
                     continue;
                 }
 
+                // <attr>_old/<attr>_new are emitted only on real change so downstream systems can distinguish
+                // "attribute present" from "attribute transitioned" without re-diffing full object payloads.
                 properties[attribute + "_old"] = DeserializeCanonical(previousValue);
                 properties[attribute + "_new"] = DeserializeCanonical(currentValue);
             }
