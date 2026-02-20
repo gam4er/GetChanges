@@ -12,6 +12,8 @@ using System.Security.AccessControl;
 using System.Threading;
 using System.Threading.Tasks;
 
+using SearchOption = System.DirectoryServices.Protocols.SearchOption;
+
 namespace GCNet
 {
     internal sealed class ChangeMonitorApplication
