@@ -4,11 +4,11 @@ using SharpHoundCommonLib.Processors;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.DirectoryServices;
 using System.DirectoryServices.Protocols;
 using System.IO;
 using System.Linq;
 using System.Security.AccessControl;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Spectre.Console;
@@ -27,7 +27,7 @@ namespace GCNet
             var connection = LDAPSearches.InitializeConnection();
             try
             {
-                var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn() : options.BaseDn;
+                var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn(connection) : options.BaseDn;
                 var dnIgnoreFilters = LoadDnIgnoreFilters(options.DnIgnoreListPath);
                 AppConsole.Log("Loaded DN ignore filters: " + dnIgnoreFilters.Count + " from " + options.DnIgnoreListPath);
 
@@ -119,6 +119,7 @@ namespace GCNet
                 null
                 );
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
+            request.Controls.Add(new DomainScopeControl());
             /*
             DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
             request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
@@ -175,7 +176,7 @@ namespace GCNet
                 }
                 catch (Exception ex)
                 {
-                    AppConsole.WriteException(ex, "Callback error while processing LDAP notifications.");
+                    AppConsole.WriteException(ex, "Callback error while processing LDAP notifications." + BuildLdapDiagnostics(ex));
                 }
             };
 
@@ -392,12 +393,50 @@ namespace GCNet
             return System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().DomainName;
         }
 
-        private static string GetBaseDn()
+        private static string BuildLdapDiagnostics(Exception ex)
         {
-            using (var rootDse = new DirectoryEntry("LDAP://RootDSE"))
+            var diagnostics = new StringBuilder();
+
+            var directoryOperationException = ex as DirectoryOperationException ?? ex.InnerException as DirectoryOperationException;
+            if (directoryOperationException?.Response != null)
             {
-                return rootDse.Properties["defaultNamingContext"].Value.ToString();
+                diagnostics.AppendLine();
+                diagnostics.Append("LDAP ResultCode: ").Append(directoryOperationException.Response.ResultCode);
+                diagnostics.AppendLine();
+                diagnostics.Append("LDAP ErrorMessage: ").Append(directoryOperationException.Response.ErrorMessage ?? "<empty>");
+
+                if (directoryOperationException.Response is SearchResponse searchResponse)
+                {
+                    diagnostics.AppendLine();
+                    diagnostics.Append("LDAP MatchedDN: ").Append(searchResponse.MatchedDN ?? "<empty>");
+                }
             }
+
+            var ldapException = ex as LdapException ?? ex.InnerException as LdapException;
+            if (ldapException?.ServerErrorMessage != null)
+            {
+                diagnostics.AppendLine();
+                diagnostics.Append("LDAP ServerErrorMessage: ").Append(ldapException.ServerErrorMessage);
+            }
+
+            return diagnostics.ToString();
+        }
+
+        private static string GetBaseDn(LdapConnection connection)
+        {
+            var rootDseRequest = new SearchRequest(
+                string.Empty,
+                "(objectClass=*)",
+                System.DirectoryServices.Protocols.SearchScope.Base,
+                "defaultNamingContext");
+
+            var rootDseResponse = (SearchResponse)connection.SendRequest(rootDseRequest);
+            if (rootDseResponse.Entries.Count != 1 || !rootDseResponse.Entries[0].Attributes.Contains("defaultNamingContext"))
+            {
+                throw new InvalidOperationException("Unable to read defaultNamingContext from RootDSE via active LDAP connection.");
+            }
+
+            return rootDseResponse.Entries[0].Attributes["defaultNamingContext"][0].ToString();
         }
     }
 }
