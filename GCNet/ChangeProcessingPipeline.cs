@@ -13,13 +13,13 @@ namespace GCNet
     {
         private readonly BlockingCollection<ChangeEvent> _incoming = new BlockingCollection<ChangeEvent>(new ConcurrentQueue<ChangeEvent>());
         private readonly BlockingCollection<Dictionary<string, object>> _outgoing = new BlockingCollection<Dictionary<string, object>>(new ConcurrentQueue<Dictionary<string, object>>());
-        private readonly ConcurrentDictionary<Guid, BaselineEntry> _baseline;
+        private readonly ConcurrentDictionary<string, BaselineEntry> _baseline;
         private readonly HashSet<string> _trackedAttributes;
         private readonly bool _enrichMetadata;
         private readonly MetadataEnricher _metadataEnricher;
         private readonly Func<ChangeEvent, bool> _shouldWrite;
 
-        public ChangeProcessingPipeline(ConcurrentDictionary<Guid, BaselineEntry> baseline, IEnumerable<string> trackedAttributes, bool enrichMetadata, MetadataEnricher metadataEnricher)
+        public ChangeProcessingPipeline(ConcurrentDictionary<string, BaselineEntry> baseline, IEnumerable<string> trackedAttributes, bool enrichMetadata, MetadataEnricher metadataEnricher)
         {
             _baseline = baseline;
             _trackedAttributes = new HashSet<string>(trackedAttributes ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
@@ -68,27 +68,22 @@ namespace GCNet
 
         private bool ShouldWriteWhenTrackedAttributesChanged(ChangeEvent changeEvent)
         {
-            if (!changeEvent.ObjectGuid.HasValue)
-            {
-                return true;
-            }
-
             var snapshot = _trackedAttributes.ToDictionary(
                 a => a,
                 a => Canonicalize(changeEvent.Properties, a),
                 StringComparer.OrdinalIgnoreCase);
 
-            var guid = changeEvent.ObjectGuid.Value;
-            if (!_baseline.TryGetValue(guid, out var existing))
+            var objectKey = ObjectKeyBuilder.BuildObjectKey(changeEvent.ObjectGuid, changeEvent.DistinguishedName);
+            if (!_baseline.TryGetValue(objectKey, out var existing))
             {
-                _baseline[guid] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
+                _baseline[objectKey] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
                 AddTrackedAttributeDiff(changeEvent.Properties, null, snapshot);
                 return true;
             }
 
             var changed = _trackedAttributes.Any(a => !string.Equals(existing.Attributes.ContainsKey(a) ? existing.Attributes[a] : null, snapshot[a], StringComparison.Ordinal));
             AddTrackedAttributeDiff(changeEvent.Properties, existing.Attributes, snapshot);
-            _baseline[guid] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
+            _baseline[objectKey] = new BaselineEntry { DistinguishedName = changeEvent.DistinguishedName, Attributes = snapshot };
             return changed;
         }
 

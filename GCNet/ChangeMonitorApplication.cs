@@ -15,7 +15,7 @@ namespace GCNet
 {
     internal sealed class ChangeMonitorApplication
     {
-        private readonly ConcurrentDictionary<Guid, BaselineEntry> _baseline = new ConcurrentDictionary<Guid, BaselineEntry>();
+        private readonly ConcurrentDictionary<string, BaselineEntry> _baseline = new ConcurrentDictionary<string, BaselineEntry>();
 
         public int Run(Options options)
         {
@@ -161,10 +161,7 @@ namespace GCNet
                 foreach (SearchResultEntry entry in response.Entries)
                 {
                     var guid = ReadObjectGuid(entry);
-                    if (!guid.HasValue)
-                    {
-                        continue;
-                    }
+                    var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
 
                     var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     var properties = ParseEntry(entry);
@@ -173,7 +170,7 @@ namespace GCNet
                         snapshot[attr] = CanonicalizeAttribute(properties, attr);
                     }
 
-                    _baseline[guid.Value] = new BaselineEntry
+                    _baseline[objectKey] = new BaselineEntry
                     {
                         DistinguishedName = entry.DistinguishedName,
                         Attributes = snapshot
