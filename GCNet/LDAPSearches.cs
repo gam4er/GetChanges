@@ -111,10 +111,12 @@ namespace GCNet
             LdapDirectoryIdentifier identifier = new LdapDirectoryIdentifier(domainName);
             LdapConnection connection = new LdapConnection(identifier);
 
+            connection.Timeout = TimeSpan.FromHours(1);
             connection.SessionOptions.ProtocolVersion = 3;
             connection.AuthType = AuthType.Negotiate;
             connection.SessionOptions.AutoReconnect = true;
             connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+            TryConfigureKeepAlive(connection.SessionOptions);
             connection.SessionOptions.VerifyServerCertificate = new VerifyServerCertificateCallback((con, cer) => false);
             connection.AutoBind = true;
             connection.SessionOptions.LocatorFlag = LocatorFlags.KdcRequired | LocatorFlags.PdcRequired;
@@ -136,5 +138,30 @@ namespace GCNet
             return connection;
         }
 
+
+        private static void TryConfigureKeepAlive(LdapSessionOptions sessionOptions)
+        {
+            TrySetSessionOption(sessionOptions, "PingKeepAliveTimeout", TimeSpan.FromMinutes(2));
+            TrySetSessionOption(sessionOptions, "PingWaitTimeout", TimeSpan.FromSeconds(30));
+            TrySetSessionOption(sessionOptions, "TcpKeepAlive", true);
+        }
+
+        private static void TrySetSessionOption(LdapSessionOptions sessionOptions, string propertyName, object value)
+        {
+            var propertyInfo = typeof(LdapSessionOptions).GetProperty(propertyName);
+            if (propertyInfo == null || !propertyInfo.CanWrite)
+            {
+                return;
+            }
+
+            try
+            {
+                propertyInfo.SetValue(sessionOptions, value);
+            }
+            catch
+            {
+                // Ignore unsupported session option in current runtime/LDAP provider implementation.
+            }
+        }
     }
 }
