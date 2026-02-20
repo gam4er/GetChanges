@@ -221,6 +221,7 @@
     <Compile Include="JsonArrayFileWriter.cs" />
     <Compile Include="LDAPSearches.cs" />
     <Compile Include="MetadataEnricher.cs" />
+    <Compile Include="ObjectKeyBuilder.cs" />
     <Compile Include="Options.cs" />
     <Compile Include="GCNet.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
