@@ -20,5 +20,8 @@ namespace GCNet
 
         [Option("dn-ignore-list", Required = false, Default = DefaultDnIgnoreListPath, HelpText = "Path to a file with DN filters to ignore (one per line).")]
         public string DnIgnoreListPath { get; set; }
+
+        [Option("phantom-root", Required = false, Default = false, HelpText = "Enable LDAP SearchOption.PhantomRoot for notification search.")]
+        public bool UsePhantomRoot { get; set; }
     }
 }
