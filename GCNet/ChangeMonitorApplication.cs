@@ -157,7 +157,7 @@ namespace GCNet
                 }
             };
 
-            connection.BeginSendRequest(request, TimeSpan.FromSeconds(60 * 10), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
+            connection.BeginSendRequest(request, TimeSpan.FromSeconds(60 * 60 * 24), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
         }
 
         private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)
