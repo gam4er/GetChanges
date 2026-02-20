@@ -24,7 +24,8 @@ namespace GCNet
 
         public int Run(Options options)
         {
-            using (var connection = LDAPSearches.InitializeConnection())
+            var connection = LDAPSearches.InitializeConnection();
+            try
             {
                 var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn() : options.BaseDn;
                 var dnIgnoreFilters = LoadDnIgnoreFilters(options.DnIgnoreListPath);
@@ -35,6 +36,10 @@ namespace GCNet
                 {
                     LoadBaseline(connection, baseDn, trackedAttributes);
                 }
+
+                AppConsole.Log("Reopening LDAP connection before starting notifications...");
+                connection.Dispose();
+                connection = LDAPSearches.InitializeConnection();
 
                 MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
@@ -57,7 +62,7 @@ namespace GCNet
                         }
                     }, tokenSource.Token);
 
-                    StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters);
+                    StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot);
 
                     AppConsole.Log("Monitoring started. Press ENTER to stop.");
                     Console.ReadLine();
@@ -77,6 +82,10 @@ namespace GCNet
 
                     AppConsole.Log("Shutdown completed.");
                 }
+            }
+            finally
+            {
+                connection.Dispose();
             }
 
             return 0;
@@ -101,7 +110,8 @@ namespace GCNet
             string baseDn,
             LdapConnection connection,
             BlockingCollection<ChangeEvent> target,
-            IReadOnlyCollection<string> dnIgnoreFilters)
+            IReadOnlyCollection<string> dnIgnoreFilters,
+            bool usePhantomRoot)
         {
             var request = new SearchRequest(
                 baseDn,
@@ -121,9 +131,13 @@ namespace GCNet
             DirectoryControl LDAP_SERVER_SHOW_RECYCLED_OID = new DirectoryControl("1.2.840.113556.1.4.2064", null, true, true);
             request.Controls.Add(LDAP_SERVER_SHOW_RECYCLED_OID);
 
-            SearchOptionsControl searchOptions = new SearchOptionsControl(SearchOption.PhantomRoot);
-            request.Controls.Add(searchOptions);
+            if (usePhantomRoot)
+            {
+                SearchOptionsControl searchOptions = new SearchOptionsControl(SearchOption.PhantomRoot);
+                request.Controls.Add(searchOptions);
+            }
 
+            AppConsole.LiveCounter("Notifications received total", 0);
 
             AsyncCallback callback = ar =>
             {
@@ -158,7 +172,7 @@ namespace GCNet
                         });
 
                         var totalNotifications = Interlocked.Increment(ref _notificationCount);
-                        AppConsole.Log("Notifications received total: " + totalNotifications);
+                        AppConsole.LiveCounter("Notifications received total", totalNotifications);
                     }
                 }
                 catch (Exception ex)

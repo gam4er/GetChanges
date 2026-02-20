@@ -16,8 +16,14 @@ namespace GCNet
             AnsiConsole.MarkupLine($"[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] {Markup.Escape(message)}");
         }
 
+        public static void LiveCounter(string label, long value)
+        {
+            AnsiConsole.Markup($"\r[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] {Markup.Escape(label)}: {value}   ");
+        }
+
         public static void WriteException(Exception ex, string context)
         {
+            Console.WriteLine();
             Log(context);
             AnsiConsole.Write(new Rule("Compact"));
             AnsiConsole.WriteException(ex, CompactExceptionFormat);
