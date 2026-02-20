@@ -264,9 +264,11 @@ namespace GCNet
             var healthy = new List<DomainControllerProbeResult>();
             foreach (var candidate in discovered)
             {
+                AppConsole.Log("dc-probe: checking " + candidate.Fqdn + " (site: " + (candidate.SiteName ?? "<unknown>") + ")");
                 var probe = ProbeDomainController(candidate.Fqdn, TimeSpan.FromSeconds(3));
                 if (probe.IsHealthy)
                 {
+                    AppConsole.Log("dc-probe-ok: " + candidate.Fqdn + " RTT=" + probe.RoundTripTimeMs + "ms");
                     probe.SiteName = candidate.SiteName;
                     healthy.Add(probe);
                 }
@@ -340,19 +342,24 @@ namespace GCNet
             string domainName = IPGlobalProperties.GetIPGlobalProperties().DomainName;
             if (string.IsNullOrWhiteSpace(domainName))
             {
+                AppConsole.Log("dc-discovery: local machine is not joined to a domain (empty DNS suffix).");
                 return result;
             }
 
             try
             {
+                AppConsole.Log("dc-discovery: querying Domain.GetCurrentDomain().DomainControllers");
                 var domain = Domain.GetCurrentDomain();
                 foreach (DomainController dc in domain.DomainControllers)
                 {
                     var name = (dc.Name ?? string.Empty).Trim();
                     if (string.IsNullOrWhiteSpace(name))
                     {
+                        AppConsole.Log("dc-discovery: skipping controller with empty name.");
                         continue;
                     }
+
+                    AppConsole.Log("dc-discovery: candidate " + name + " (site: " + (dc.SiteName ?? "<unknown>") + ")");
 
                     result.Add(new DomainControllerCandidate
                     {
@@ -368,6 +375,7 @@ namespace GCNet
 
             if (result.Count == 0)
             {
+                AppConsole.Log("dc-discovery: no DCs from Domain.GetCurrentDomain(), fallback candidate is domain DNS name " + domainName);
                 result.Add(new DomainControllerCandidate
                 {
                     Fqdn = domainName,
