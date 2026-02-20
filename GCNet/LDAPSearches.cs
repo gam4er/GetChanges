@@ -8,6 +8,8 @@ using System.DirectoryServices.Protocols;
 using System.Linq;
 using System.Net.NetworkInformation;
 
+using SearchScope = System.DirectoryServices.Protocols.SearchScope;
+
 namespace GCNet
 {
     internal interface IDomainControllerSelector
