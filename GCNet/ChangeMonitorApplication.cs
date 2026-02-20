@@ -21,10 +21,13 @@ namespace GCNet
     {
         private readonly ConcurrentDictionary<string, BaselineEntry> _baseline = new ConcurrentDictionary<string, BaselineEntry>();
         private long _notificationCount;
+        private static readonly object BackoffRandomLock = new object();
+        private static readonly Random BackoffRandom = new Random();
 
         public int Run(Options options)
         {
-            var connection = LDAPSearches.InitializeConnection();
+            var connectionFactory = new Func<LdapConnection>(LDAPSearches.InitializeConnection);
+            var connection = connectionFactory();
             try
             {
                 var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn(connection) : options.BaseDn;
@@ -36,10 +39,6 @@ namespace GCNet
                 {
                     LoadBaseline(connection, baseDn, trackedAttributes);
                 }
-
-                AppConsole.Log("Reopening LDAP connection before starting notifications...");
-                connection.Dispose();
-                connection = LDAPSearches.InitializeConnection();
 
                 MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
@@ -61,13 +60,31 @@ namespace GCNet
                         {
                         }
                     }, tokenSource.Token);
+
+                    var notificationLoopTask = Task.Run(() => RunNotificationLoop(
+                        baseDn,
+                        connectionFactory,
+                        pipeline.Incoming,
+                        dnIgnoreFilters,
+                        options.UsePhantomRoot,
+                        tokenSource.Token), tokenSource.Token);
+
                     AppConsole.Log("Monitoring starting. Press ENTER to stop.");
-                    StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot);
-                    
+
                     Console.ReadLine();
 
                     AppConsole.Log("Stopping monitoring and completing pipeline...");
                     tokenSource.Cancel();
+
+                    try
+                    {
+                        notificationLoopTask.Wait(TimeSpan.FromSeconds(5));
+                    }
+                    catch (Exception ex)
+                    {
+                        AppConsole.WriteException(ex, "Error while shutting down notification loop.");
+                    }
+
                     pipeline.Incoming.CompleteAdding();
 
                     try
@@ -105,25 +122,132 @@ namespace GCNet
                 .ToList();
         }
 
-        private void StartNotification(
+        private void RunNotificationLoop(
             string baseDn,
-            LdapConnection connection,
+            Func<LdapConnection> connectionFactory,
             BlockingCollection<ChangeEvent> target,
             IReadOnlyCollection<string> dnIgnoreFilters,
-            bool usePhantomRoot)
+            bool usePhantomRoot,
+            CancellationToken cancellationToken)
+        {
+            var attempt = 0;
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                LdapConnection sessionConnection = null;
+                try
+                {
+                    AppConsole.Log("connect: creating LDAP notification session");
+                    sessionConnection = connectionFactory();
+
+                    var request = BuildNotificationRequest(baseDn, usePhantomRoot);
+                    var restartSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                    AsyncCallback callback = ar =>
+                    {
+                        try
+                        {
+                            var partialResults = sessionConnection.GetPartialResults(ar);
+                            for (int i = 0; i < partialResults.Count; i++)
+                            {
+                                if (cancellationToken.IsCancellationRequested)
+                                {
+                                    return;
+                                }
+
+                                var entry = partialResults[i] as SearchResultEntry;
+                                if (entry == null)
+                                {
+                                    continue;
+                                }
+
+                                var entryDn = (entry.DistinguishedName ?? string.Empty).ToLowerInvariant();
+                                if (ShouldIgnoreByDn(entryDn, dnIgnoreFilters))
+                                {
+                                    continue;
+                                }
+
+                                var properties = ParseEntry(entry);
+                                if (properties == null)
+                                {
+                                    continue;
+                                }
+
+                                target.Add(new ChangeEvent
+                                {
+                                    DistinguishedName = entry.DistinguishedName,
+                                    ObjectGuid = ReadObjectGuid(entry),
+                                    Properties = properties
+                                }, cancellationToken);
+
+                                var totalNotifications = Interlocked.Increment(ref _notificationCount);
+                                AppConsole.LiveCounter("Notifications received total", totalNotifications);
+                            }
+                        }
+                        catch (Exception ex) when (IsRecoverableNotificationException(ex))
+                        {
+                            AppConsole.WriteException(ex, "callback-fail: recoverable LDAP notification error." + BuildLdapDiagnostics(ex));
+                            restartSignal.TrySetResult(true);
+                        }
+                        catch (Exception ex)
+                        {
+                            AppConsole.WriteException(ex, "Callback error while processing LDAP notifications." + BuildLdapDiagnostics(ex));
+                        }
+                    };
+
+                    AppConsole.Log("subscribe: starting LDAP change notification subscription");
+                    sessionConnection.BeginSendRequest(
+                        request,
+                        TimeSpan.FromDays(1),
+                        PartialResultProcessing.ReturnPartialResultsAndNotifyCallback,
+                        callback,
+                        sessionConnection);
+
+                    AppConsole.Log("reconnect-success: LDAP notification session is active");
+                    attempt = 0;
+
+                    WaitForRestartOrCancellation(restartSignal.Task, cancellationToken);
+                }
+                catch (Exception ex) when (IsRecoverableNotificationException(ex))
+                {
+                    AppConsole.WriteException(ex, "callback-fail: recoverable session error while starting/serving notifications." + BuildLdapDiagnostics(ex));
+                }
+                finally
+                {
+                    sessionConnection?.Dispose();
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                attempt++;
+                var delay = CalculateReconnectDelay(attempt);
+                AppConsole.Log("reconnect-attempt: waiting " + delay + " before creating new LDAP session");
+                try
+                {
+                    Task.Delay(delay, cancellationToken).Wait(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+
+        private static SearchRequest BuildNotificationRequest(string baseDn, bool usePhantomRoot)
         {
             var request = new SearchRequest(
                 baseDn,
                 "(objectClass=*)",
                 System.DirectoryServices.Protocols.SearchScope.Subtree,
                 null
-                );
+            );
+
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
             request.Controls.Add(new DomainScopeControl());
-            /*
-            DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
-            request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
-            */
+
             DirectoryControl LDAP_SERVER_SHOW_DELETED_OID = new DirectoryControl("1.2.840.113556.1.4.417", null, true, true);
             request.Controls.Add(LDAP_SERVER_SHOW_DELETED_OID);
 
@@ -136,51 +260,42 @@ namespace GCNet
                 request.Controls.Add(searchOptions);
             }
 
-            //AppConsole.LiveCounter("Notifications received total", 0);
+            return request;
+        }
 
-            AsyncCallback callback = ar =>
+        private static bool IsRecoverableNotificationException(Exception ex)
+        {
+            return ex is LdapException
+                || ex is DirectoryOperationException
+                || ex is ObjectDisposedException
+                || ex is IOException
+                || ex.InnerException is LdapException
+                || ex.InnerException is DirectoryOperationException
+                || ex.InnerException is IOException;
+        }
+
+        private static TimeSpan CalculateReconnectDelay(int attempt)
+        {
+            var cappedAttempt = Math.Min(attempt, 6);
+            var baseDelaySeconds = Math.Pow(2, Math.Max(0, cappedAttempt - 1));
+            double jitter;
+            lock (BackoffRandomLock)
             {
-                try
+                jitter = BackoffRandom.NextDouble() * 0.2;
+            }
+            var delayWithJitter = baseDelaySeconds * (1.0 + jitter);
+            return TimeSpan.FromSeconds(Math.Min(60, delayWithJitter));
+        }
+
+        private static void WaitForRestartOrCancellation(Task restartTask, CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (restartTask.Wait(TimeSpan.FromMilliseconds(250)))
                 {
-                    var partialResults = connection.GetPartialResults(ar);
-                    for (int i = 0; i < partialResults.Count; i++)
-                    {
-                        var entry = partialResults[i] as SearchResultEntry;
-                        if (entry == null)
-                        {
-                            continue;
-                        }
-
-                        var entryDn = (entry.DistinguishedName ?? string.Empty).ToLowerInvariant();
-                        if (ShouldIgnoreByDn(entryDn, dnIgnoreFilters))
-                        {
-                            continue;
-                        }
-
-                        var properties = ParseEntry(entry);
-                        if (properties == null)
-                        {
-                            continue;
-                        }
-
-                        target.Add(new ChangeEvent
-                        {
-                            DistinguishedName = entry.DistinguishedName,
-                            ObjectGuid = ReadObjectGuid(entry),
-                            Properties = properties
-                        });
-
-                        var totalNotifications = Interlocked.Increment(ref _notificationCount);
-                        AppConsole.LiveCounter("Notifications received total", totalNotifications);
-                    }
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    AppConsole.WriteException(ex, "Callback error while processing LDAP notifications." + BuildLdapDiagnostics(ex));
-                }
-            };
-
-            connection.BeginSendRequest(request, TimeSpan.FromSeconds(60 * 60 * 24), PartialResultProcessing.ReturnPartialResultsAndNotifyCallback, callback, connection);
+            }
         }
 
         private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)
