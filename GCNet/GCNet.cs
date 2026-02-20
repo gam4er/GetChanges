@@ -7,11 +7,19 @@ namespace GCNet
     {
         private static int Main(string[] args)
         {
-            return Parser.Default
-                .ParseArguments<Options>(args)
-                .MapResult(
-                    opts => new ChangeMonitorApplication().Run(opts),
-                    _ => 1);
+            try
+            {
+                return Parser.Default
+                    .ParseArguments<Options>(args)
+                    .MapResult(
+                        opts => new ChangeMonitorApplication().Run(opts),
+                        _ => 1);
+            }
+            catch (Exception ex)
+            {
+                AppConsole.WriteException(ex, "Fatal application error.");
+                return 1;
+            }
         }
     }
 }

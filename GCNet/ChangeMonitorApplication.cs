@@ -11,6 +11,7 @@ using System.Linq;
 using System.Security.AccessControl;
 using System.Threading;
 using System.Threading.Tasks;
+using Spectre.Console;
 
 using SearchOption = System.DirectoryServices.Protocols.SearchOption;
 
@@ -19,6 +20,7 @@ namespace GCNet
     internal sealed class ChangeMonitorApplication
     {
         private readonly ConcurrentDictionary<string, BaselineEntry> _baseline = new ConcurrentDictionary<string, BaselineEntry>();
+        private long _notificationCount;
 
         public int Run(Options options)
         {
@@ -26,7 +28,7 @@ namespace GCNet
             {
                 var baseDn = string.IsNullOrWhiteSpace(options.BaseDn) ? GetBaseDn() : options.BaseDn;
                 var dnIgnoreFilters = LoadDnIgnoreFilters(options.DnIgnoreListPath);
-                Console.WriteLine("Loaded DN ignore filters: " + dnIgnoreFilters.Count + " from " + options.DnIgnoreListPath);
+                AppConsole.Log("Loaded DN ignore filters: " + dnIgnoreFilters.Count + " from " + options.DnIgnoreListPath);
 
                 var trackedAttributes = ParseTrackedAttributes(options.TrackedAttributes);
                 if (trackedAttributes.Count > 0)
@@ -57,9 +59,10 @@ namespace GCNet
 
                     StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters);
 
-                    Console.WriteLine("Monitoring started. Press ENTER to stop.");
+                    AppConsole.Log("Monitoring started. Press ENTER to stop.");
                     Console.ReadLine();
 
+                    AppConsole.Log("Stopping monitoring and completing pipeline...");
                     tokenSource.Cancel();
                     pipeline.Incoming.CompleteAdding();
 
@@ -69,8 +72,10 @@ namespace GCNet
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine(ex.Message);
+                        AppConsole.WriteException(ex, "Error while shutting down worker tasks.");
                     }
+
+                    AppConsole.Log("Shutdown completed.");
                 }
             }
 
@@ -151,11 +156,14 @@ namespace GCNet
                             ObjectGuid = ReadObjectGuid(entry),
                             Properties = properties
                         });
+
+                        var totalNotifications = Interlocked.Increment(ref _notificationCount);
+                        AppConsole.Log("Notifications received total: " + totalNotifications);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Callback error: " + ex.Message);
+                    AppConsole.WriteException(ex, "Callback error while processing LDAP notifications.");
                 }
             };
 
@@ -169,7 +177,7 @@ namespace GCNet
             if (!File.Exists(targetPath))
             {
                 File.WriteAllText(targetPath, "# DN filters to ignore, one per line" + Environment.NewLine);
-                Console.WriteLine("DN ignore list file was not found and has been created: " + targetPath);
+                AppConsole.Log("DN ignore list file was not found and has been created: " + targetPath);
                 return Array.Empty<string>();
             }
 
@@ -201,39 +209,60 @@ namespace GCNet
             var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, attributes.ToArray());
             request.Controls.Add(new PageResultRequestControl(1000));
 
-            while (true)
-            {
-                var response = (SearchResponse)connection.SendRequest(request);
-                foreach (SearchResultEntry entry in response.Entries)
-                {
-                    var guid = ReadObjectGuid(entry);
-                    var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
+            var loadedCount = 0;
 
-                    var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    var properties = ParseEntry(entry);
-                    foreach (var attr in trackedAttributes)
+            AnsiConsole.Progress()
+                .AutoClear(false)
+                .HideCompleted(true)
+                .Columns(new ProgressColumn[]
+                {
+                    new TaskDescriptionColumn(),
+                    new SpinnerColumn()
+                })
+                .Start(ctx =>
+                {
+                    var task = ctx.AddTask("[green]Loading baseline[/]", autoStart: true);
+                    task.IsIndeterminate = true;
+
+                    while (true)
                     {
-                        snapshot[attr] = CanonicalizeAttribute(properties, attr);
+                        var response = (SearchResponse)connection.SendRequest(request);
+                        foreach (SearchResultEntry entry in response.Entries)
+                        {
+                            var guid = ReadObjectGuid(entry);
+                            var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
+
+                            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            var properties = ParseEntry(entry);
+                            foreach (var attr in trackedAttributes)
+                            {
+                                snapshot[attr] = CanonicalizeAttribute(properties, attr);
+                            }
+
+                            _baseline[objectKey] = new BaselineEntry
+                            {
+                                DistinguishedName = entry.DistinguishedName,
+                                Attributes = snapshot
+                            };
+
+                            loadedCount++;
+                            task.Description($"[green]Loading baseline[/] [grey](objects: {loadedCount})[/]");
+                        }
+
+                        var page = response.Controls.OfType<PageResultResponseControl>().FirstOrDefault();
+                        if (page == null || page.Cookie == null || page.Cookie.Length == 0)
+                        {
+                            break;
+                        }
+
+                        var pageRequest = request.Controls.OfType<PageResultRequestControl>().First();
+                        pageRequest.Cookie = page.Cookie;
                     }
 
-                    _baseline[objectKey] = new BaselineEntry
-                    {
-                        DistinguishedName = entry.DistinguishedName,
-                        Attributes = snapshot
-                    };
-                }
+                    task.StopTask();
+                });
 
-                var page = response.Controls.OfType<PageResultResponseControl>().FirstOrDefault();
-                if (page == null || page.Cookie == null || page.Cookie.Length == 0)
-                {
-                    break;
-                }
-
-                var pageRequest = request.Controls.OfType<PageResultRequestControl>().First();
-                pageRequest.Cookie = page.Cookie;
-            }
-
-            Console.WriteLine("Loaded baseline for objects: " + _baseline.Count);
+            AppConsole.Log("Loaded baseline for objects: " + _baseline.Count);
         }
 
         private static string CanonicalizeAttribute(Dictionary<string, object> properties, string attribute)
@@ -307,7 +336,7 @@ namespace GCNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("usercertificate parsing error" + ex.Message);
+                AppConsole.WriteException(ex, "usercertificate parsing error");
             }
 
             try
@@ -320,7 +349,7 @@ namespace GCNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("msexchmailboxsecuritydescriptor parsing error" + ex.Message);
+                AppConsole.WriteException(ex, "msexchmailboxsecuritydescriptor parsing error");
             }
 
             properties.Remove("thumbnailphoto");
