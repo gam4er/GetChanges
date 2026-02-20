@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 using System.IO;
 using System.Net.NetworkInformation;
@@ -179,11 +180,11 @@ namespace Sharphound.Writers
             try
             {
                 connection.Bind();
-                Console.WriteLine("Successful bind.");
+                Trace.TraceInformation("Successful bind.");
             }
             catch (LdapException e)
             {
-                Console.WriteLine("LDAP error: " + e.Message);
+                Trace.TraceError("LDAP error: " + e.Message);
                 throw;
             }
 
