@@ -125,11 +125,11 @@ namespace GCNet
             try
             {
                 connection.Bind();
-                Console.WriteLine("Successful bind.");
+                AppConsole.Log("Successful bind.");
             }
             catch (LdapException e)
             {
-                Console.WriteLine("LDAP error: " + e.Message);
+                AppConsole.Log("[ERROR] LDAP error: " + e.Message);
                 throw;
             }
 
