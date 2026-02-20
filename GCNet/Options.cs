@@ -23,5 +23,14 @@ namespace GCNet
 
         [Option("phantom-root", Required = false, Default = false, HelpText = "Enable LDAP SearchOption.PhantomRoot for notification search.")]
         public bool UsePhantomRoot { get; set; }
+
+        [Option("dc", Required = false, HelpText = "Explicit domain controller FQDN to use for LDAP connections.")]
+        public string DomainController { get; set; }
+
+        [Option("dc-selection", Required = false, Default = "auto", HelpText = "Domain controller selection mode: auto or manual.")]
+        public string DomainControllerSelectionMode { get; set; }
+
+        [Option("prefer-site-local", Required = false, Default = true, HelpText = "Prefer healthy domain controllers in the local AD site.")]
+        public bool PreferSiteLocal { get; set; }
     }
 }
