@@ -1,80 +1,138 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
+using System.DirectoryServices.ActiveDirectory;
 using System.DirectoryServices.Protocols;
+using System.Linq;
 using System.Net.NetworkInformation;
+
+using SearchScope = System.DirectoryServices.Protocols.SearchScope;
 
 namespace GCNet
 {
-    internal class LDAPSearches
+    internal interface IDomainControllerSelector
     {
+        string SelectBestDomainController(Options options, out string reason);
+    }
+
+    internal interface ILdapConnectionFactory
+    {
+        LdapConnection CreateBoundConnection(Options options);
+    }
+
+    internal interface ILdapSchemaHelper
+    {
+        string GetSchemaNamingContext(LdapConnection ldapConnection);
+        Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection);
+    }
+
+    internal sealed class LDAPSearches
+    {
+        private static readonly IDomainControllerSelector DomainControllerSelector = new DomainControllerSelector();
+        private static readonly ILdapConnectionFactory ConnectionFactory = new LdapConnectionFactory(DomainControllerSelector);
+        private static readonly ILdapSchemaHelper SchemaHelper = new LdapSchemaHelper();
+
+        /// <summary>
+        /// Creates and binds an LDAP connection to the currently preferred domain controller so callers share
+        /// one consistent DC-selection policy for all read/monitoring operations.
+        /// </summary>
+        public static LdapConnection CreateBoundConnection(Options options)
+        {
+            return ConnectionFactory.CreateBoundConnection(options);
+        }
+
+        /// <summary>
+        /// Reads schemaNamingContext from RootDSE using an existing connection to avoid deriving schema DN from
+        /// assumptions that can break in multi-domain/forest deployments.
+        /// </summary>
         public static string GetSchemaNamingContext(LdapConnection ldapConnection)
+        {
+            return SchemaHelper.GetSchemaNamingContext(ldapConnection);
+        }
+
+        /// <summary>
+        /// Loads LDAP attribute schema metadata keyed by lDAPDisplayName so value parsers can interpret attribute
+        /// payloads consistently across notification and snapshot paths.
+        /// </summary>
+        public static Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
+        {
+            return SchemaHelper.GetAllAttributes(ldapConnection);
+        }
+
+        /// <summary>
+        /// Returns the distinguished name of the current user container; used as a pragmatic default scope when
+        /// operators do not provide an explicit search base.
+        /// </summary>
+        public static string GetUserOU()
+        {
+            var user = UserPrincipal.Current;
+            DirectoryEntry deUser = user.GetUnderlyingObject() as DirectoryEntry;
+            DirectoryEntry deUserContainer = deUser.Parent;
+            return deUserContainer.Properties["distinguishedName"].Value.ToString();
+        }
+
+        /// <summary>
+        /// Selects the most suitable domain controller and explains why it was chosen, so connection setup and
+        /// failover logging remain transparent and deterministic.
+        /// </summary>
+        public static string SelectBestDomainController(Options options, out string reason)
+        {
+            return DomainControllerSelector.SelectBestDomainController(options, out reason);
+        }
+    }
+
+    internal sealed class LdapSchemaHelper : ILdapSchemaHelper
+    {
+        public string GetSchemaNamingContext(LdapConnection ldapConnection)
         {
             try
             {
-                // Запрос RootDSE для получения схемы DN
-                var request = new SearchRequest(
-                    null, // RootDSE имеет null как base DN
-                    "(objectClass=*)",
-                    System.DirectoryServices.Protocols.SearchScope.Base,
-                    "schemaNamingContext");
-
+                var request = new SearchRequest(null, "(objectClass=*)", SearchScope.Base, "schemaNamingContext");
                 var response = (SearchResponse)ldapConnection.SendRequest(request);
                 if (response.Entries.Count == 1)
                 {
-                    return response.Entries [0].Attributes ["schemaNamingContext"] [0].ToString();
+                    return response.Entries[0].Attributes["schemaNamingContext"][0].ToString();
                 }
-                else
-                {
-                    throw new Exception("Unable to get schema naming context.");
-                }
+
+                throw new Exception("Unable to get schema naming context.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                AppConsole.WriteException(ex, "dc-schema: failed to read schemaNamingContext");
                 return null;
             }
         }
 
-        public static Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
+        public Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
         {
             var attributeDictionary = new Dictionary<string, string>();
             string schemaNamingContext = GetSchemaNamingContext(ldapConnection);
 
             if (schemaNamingContext == null)
             {
-                Console.WriteLine("Failed to retrieve schema naming context.");
+                AppConsole.Log("dc-schema: schemaNamingContext is unavailable");
                 return attributeDictionary;
             }
 
             try
             {
-                // Используем пагинацию для получения всех атрибутов
                 var pageResultRequestControl = new PageResultRequestControl(1000);
-                var searchRequest = new SearchRequest(
-                schemaNamingContext,
-                "(objectClass=attributeSchema)",
-                System.DirectoryServices.Protocols.SearchScope.Subtree,
-                null);
+                var searchRequest = new SearchRequest(schemaNamingContext, "(objectClass=attributeSchema)", SearchScope.Subtree, null);
                 searchRequest.Controls.Add(pageResultRequestControl);
 
                 while (true)
                 {
                     var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
-
                     foreach (SearchResultEntry entry in searchResponse.Entries)
                     {
-                        string attributeName = entry.Attributes ["lDAPDisplayName"] [0].ToString();
-                        if (attributeName == "directReports")
-                        {
-                            Console.WriteLine("directReports attribute.");
-                        }
-                        string attributeSyntax = entry.Attributes ["attributeSyntax"] [0].ToString();
-                        attributeDictionary [attributeName] = attributeSyntax;
+                        string attributeName = entry.Attributes["lDAPDisplayName"][0].ToString();
+                        string attributeSyntax = entry.Attributes["attributeSyntax"][0].ToString();
+                        attributeDictionary[attributeName] = attributeSyntax;
                     }
 
-                    var pageResponseControl = (PageResultResponseControl)searchResponse.Controls [0];
+                    var pageResponseControl = (PageResultResponseControl)searchResponse.Controls[0];
                     if (pageResponseControl.Cookie.Length == 0)
                     {
                         break;
@@ -85,56 +143,296 @@ namespace GCNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                AppConsole.WriteException(ex, "dc-schema: failed to load attribute schema entries");
             }
 
             return attributeDictionary;
         }
+    }
 
-        public static string GetUserOU()
+    internal sealed class LdapConnectionFactory : ILdapConnectionFactory
+    {
+        private readonly IDomainControllerSelector _domainControllerSelector;
+
+        public LdapConnectionFactory(IDomainControllerSelector domainControllerSelector)
         {
-            var user = UserPrincipal.Current;
-            DirectoryEntry deUser = user.GetUnderlyingObject() as DirectoryEntry;
-            DirectoryEntry deUserContainer = deUser.Parent;
-            return deUserContainer.Properties ["distinguishedName"].Value.ToString();
+            _domainControllerSelector = domainControllerSelector;
         }
-        public static LdapConnection InitializeConnection()
-        {
-            string domainName = IPGlobalProperties.GetIPGlobalProperties().DomainName;
 
-            if (string.IsNullOrEmpty(domainName))
+        public LdapConnection CreateBoundConnection(Options options)
+        {
+            var selectedDc = _domainControllerSelector.SelectBestDomainController(options, out var selectionReason);
+            if (string.IsNullOrWhiteSpace(selectedDc))
             {
-                Console.WriteLine("Не удалось определить домен текущего пользователя.");
-                return null;
+                throw new InvalidOperationException("Unable to select domain controller for LDAP connection.");
             }
 
-            LdapDirectoryIdentifier identifier = new LdapDirectoryIdentifier(domainName);
-            LdapConnection connection = new LdapConnection(identifier);
+            AppConsole.Log("dc-selected: " + selectedDc + " (reason: " + selectionReason + ")");
+
+            var identifier = new LdapDirectoryIdentifier(selectedDc);
+            var connection = new LdapConnection(identifier)
+            {
+                Timeout = TimeSpan.FromHours(1),
+                AuthType = AuthType.Negotiate,
+                AutoBind = true
+            };
 
             connection.SessionOptions.ProtocolVersion = 3;
-            connection.AuthType = AuthType.Negotiate;
             connection.SessionOptions.AutoReconnect = true;
             connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+            TryConfigureKeepAlive(connection.SessionOptions);
             connection.SessionOptions.VerifyServerCertificate = new VerifyServerCertificateCallback((con, cer) => false);
-            connection.AutoBind = true;
-            connection.SessionOptions.LocatorFlag = LocatorFlags.KdcRequired | LocatorFlags.PdcRequired;
-            //connection.SessionOptions.Sealing = false;
-            //connection.SessionOptions.Signing = false;
-            //connection.SessionOptions.SecureSocketLayer = false;
 
             try
             {
                 connection.Bind();
-                Console.WriteLine("Successful bind.");
+                AppConsole.Log("Successful bind to " + selectedDc + ".");
             }
             catch (LdapException e)
             {
-                Console.WriteLine("LDAP error: " + e.Message);
+                AppConsole.Log("[ERROR] LDAP bind failed for " + selectedDc + ": " + e.Message);
                 throw;
             }
 
             return connection;
         }
 
+        private static void TryConfigureKeepAlive(LdapSessionOptions sessionOptions)
+        {
+            TrySetSessionOption(sessionOptions, "PingKeepAliveTimeout", TimeSpan.FromMinutes(2));
+            TrySetSessionOption(sessionOptions, "PingWaitTimeout", TimeSpan.FromSeconds(30));
+            TrySetSessionOption(sessionOptions, "TcpKeepAlive", true);
+        }
+
+        private static void TrySetSessionOption(LdapSessionOptions sessionOptions, string propertyName, object value)
+        {
+            var propertyInfo = typeof(LdapSessionOptions).GetProperty(propertyName);
+            if (propertyInfo == null || !propertyInfo.CanWrite)
+            {
+                return;
+            }
+
+            try
+            {
+                propertyInfo.SetValue(sessionOptions, value);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    internal sealed class DomainControllerSelector : IDomainControllerSelector
+    {
+        private static readonly object DcSelectionLock = new object();
+        private static readonly List<string> FallbackDomainControllers = new List<string>();
+        private static int FallbackCursor;
+
+        public string SelectBestDomainController(Options options, out string reason)
+        {
+            var mode = (options.DomainControllerSelectionMode ?? "auto").Trim().ToLowerInvariant();
+            if (mode == "manual")
+            {
+                if (string.IsNullOrWhiteSpace(options.DomainController))
+                {
+                    throw new ArgumentException("--dc is required when --dc-selection=manual.");
+                }
+
+                reason = "manual configuration (--dc)";
+                lock (DcSelectionLock)
+                {
+                    FallbackDomainControllers.Clear();
+                    FallbackDomainControllers.Add(options.DomainController.Trim());
+                    FallbackCursor = 0;
+                }
+
+                return options.DomainController.Trim();
+            }
+
+            var discovered = DiscoverDomainControllers();
+            if (discovered.Count == 0)
+            {
+                if (!string.IsNullOrWhiteSpace(options.DomainController))
+                {
+                    reason = "auto fallback to explicit --dc";
+                    return options.DomainController.Trim();
+                }
+
+                throw new InvalidOperationException("No domain controllers discovered.");
+            }
+
+            var healthy = new List<DomainControllerProbeResult>();
+            foreach (var candidate in discovered)
+            {
+                var probe = ProbeDomainController(candidate.Fqdn, TimeSpan.FromSeconds(3));
+                if (probe.IsHealthy)
+                {
+                    probe.SiteName = candidate.SiteName;
+                    healthy.Add(probe);
+                }
+                else
+                {
+                    AppConsole.Log("dc-probe-failed: " + candidate.Fqdn + " (" + probe.FailureReason + ")");
+                }
+            }
+
+            if (healthy.Count == 0)
+            {
+                if (!string.IsNullOrWhiteSpace(options.DomainController))
+                {
+                    reason = "no healthy auto-discovered DC, fallback to explicit --dc";
+                    return options.DomainController.Trim();
+                }
+
+                throw new InvalidOperationException("No healthy domain controllers available.");
+            }
+
+            var localSite = GetLocalSiteName();
+            // Strategy: prefer healthy low-latency DCs (optionally local site first), but keep full ordered list
+            // for round-robin failover so repeated reconnects do not hammer a single controller.
+            var ordered = healthy
+                .OrderBy(x => options.PreferSiteLocal
+                              && !string.IsNullOrWhiteSpace(localSite)
+                              && !string.Equals(x.SiteName, localSite, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(x => x.RoundTripTimeMs)
+                .ThenBy(x => x.Fqdn, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            lock (DcSelectionLock)
+            {
+                FallbackDomainControllers.Clear();
+                FallbackDomainControllers.AddRange(ordered.Select(x => x.Fqdn));
+
+                var selectedIndex = FallbackCursor % FallbackDomainControllers.Count;
+                var selected = FallbackDomainControllers[selectedIndex];
+                FallbackCursor = (selectedIndex + 1) % FallbackDomainControllers.Count;
+
+                if (selectedIndex == 0)
+                {
+                    reason = "best healthy DC by RTT" + (options.PreferSiteLocal ? " with local-site preference" : string.Empty);
+                }
+                else
+                {
+                    reason = "failover rotation to next healthy DC (index " + selectedIndex + "/" + FallbackDomainControllers.Count + ")";
+                }
+
+                AppConsole.Log("dc-fallback-list: " + string.Join(", ", FallbackDomainControllers));
+                return selected;
+            }
+        }
+
+        private static string GetLocalSiteName()
+        {
+            try
+            {
+                return ActiveDirectorySite.GetComputerSite().Name;
+            }
+            catch (Exception ex)
+            {
+                AppConsole.Log("dc-discovery: unable to determine local AD site. " + ex.Message);
+                return null;
+            }
+        }
+
+        private static List<DomainControllerCandidate> DiscoverDomainControllers()
+        {
+            var result = new List<DomainControllerCandidate>();
+            string domainName = IPGlobalProperties.GetIPGlobalProperties().DomainName;
+            if (string.IsNullOrWhiteSpace(domainName))
+            {
+                return result;
+            }
+
+            try
+            {
+                var domain = Domain.GetCurrentDomain();
+                foreach (DomainController dc in domain.DomainControllers)
+                {
+                    var name = (dc.Name ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    result.Add(new DomainControllerCandidate
+                    {
+                        Fqdn = name,
+                        SiteName = dc.SiteName
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                AppConsole.Log("dc-discovery: failed via Domain.GetCurrentDomain(), fallback to domain name probe. " + ex.Message);
+            }
+
+            if (result.Count == 0)
+            {
+                result.Add(new DomainControllerCandidate
+                {
+                    Fqdn = domainName,
+                    SiteName = null
+                });
+            }
+
+            return result
+                .GroupBy(x => x.Fqdn, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private static DomainControllerProbeResult ProbeDomainController(string fqdn, TimeSpan timeout)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            try
+            {
+                var identifier = new LdapDirectoryIdentifier(fqdn);
+                using (var probeConnection = new LdapConnection(identifier))
+                {
+                    probeConnection.Timeout = timeout;
+                    probeConnection.AuthType = AuthType.Negotiate;
+                    probeConnection.SessionOptions.ProtocolVersion = 3;
+                    probeConnection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
+                    probeConnection.Bind();
+
+                    var request = new SearchRequest(null, "(objectClass=*)", SearchScope.Base, "defaultNamingContext");
+                    probeConnection.SendRequest(request, timeout);
+                }
+
+                stopwatch.Stop();
+                return new DomainControllerProbeResult
+                {
+                    Fqdn = fqdn,
+                    IsHealthy = true,
+                    RoundTripTimeMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                return new DomainControllerProbeResult
+                {
+                    Fqdn = fqdn,
+                    IsHealthy = false,
+                    RoundTripTimeMs = long.MaxValue,
+                    FailureReason = ex.Message
+                };
+            }
+        }
+
+        private sealed class DomainControllerCandidate
+        {
+            public string Fqdn { get; set; }
+            public string SiteName { get; set; }
+        }
+
+        private sealed class DomainControllerProbeResult
+        {
+            public string Fqdn { get; set; }
+            public string SiteName { get; set; }
+            public bool IsHealthy { get; set; }
+            public long RoundTripTimeMs { get; set; }
+            public string FailureReason { get; set; }
+        }
     }
 }

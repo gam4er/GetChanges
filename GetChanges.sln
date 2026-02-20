@@ -5,8 +5,6 @@ VisualStudioVersion = 17.10.35122.118
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GCNet", "GCNet\GCNet.csproj", "{4E637AA7-DFAD-4015-90C4-857B51F81366}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DirSync", "DirSync\DirSync.csproj", "{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerializeToJSONLikeSharpHound", "SerializeToJSONLikeSharpHound\SerializeToJSONLikeSharpHound.csproj", "{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpHoundCommonLib", "SharpHoundCommon\src\CommonLib\SharpHoundCommonLib.csproj", "{423B8B9B-C184-4AE7-88A9-2B446D17CC71}"
@@ -23,10 +21,6 @@ Global
 		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.Build.0 = Release|Any CPU
-		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{18872FC0-915A-4B77-BE9E-3D9FFEE332D0}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4FB827C4-46D2-4D13-9D80-0ED4CA2D0FF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
