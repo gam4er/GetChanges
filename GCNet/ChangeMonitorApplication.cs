@@ -322,7 +322,20 @@ namespace GCNet
             }
 
             properties.Remove("thumbnailphoto");
+            var pwdLastSetKey = properties.Keys.FirstOrDefault(k => string.Equals(k, "pwdLastSet", StringComparison.OrdinalIgnoreCase));
+            if (pwdLastSetKey != null)
+            {
+                var pwdLastSetValue = properties[pwdLastSetKey];
+                if ((pwdLastSetValue is long longValue && longValue == -1)
+                    || (pwdLastSetValue is int intValue && intValue == -1)
+                    || (pwdLastSetValue is string stringValue && stringValue == "-1"))
+                {
+                    properties[pwdLastSetKey] = null;
+                }
+            }
+
             properties["distinguishedName"] = entry.DistinguishedName;
+            properties["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             return properties;
         }
 
