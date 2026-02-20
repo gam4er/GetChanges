@@ -61,10 +61,9 @@ namespace GCNet
                         {
                         }
                     }, tokenSource.Token);
-
+                    AppConsole.Log("Monitoring starting. Press ENTER to stop.");
                     StartNotification(baseDn, connection, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot);
-
-                    AppConsole.Log("Monitoring started. Press ENTER to stop.");
+                    
                     Console.ReadLine();
 
                     AppConsole.Log("Stopping monitoring and completing pipeline...");
@@ -117,16 +116,15 @@ namespace GCNet
                 baseDn,
                 "(objectClass=*)",
                 System.DirectoryServices.Protocols.SearchScope.Subtree,
-                "*",
-                "objectGUID");
+                null
+                );
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
-
+            /*
             DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
             request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
-
+            */
             DirectoryControl LDAP_SERVER_SHOW_DELETED_OID = new DirectoryControl("1.2.840.113556.1.4.417", null, true, true);
             request.Controls.Add(LDAP_SERVER_SHOW_DELETED_OID);
-
 
             DirectoryControl LDAP_SERVER_SHOW_RECYCLED_OID = new DirectoryControl("1.2.840.113556.1.4.2064", null, true, true);
             request.Controls.Add(LDAP_SERVER_SHOW_RECYCLED_OID);
@@ -137,7 +135,7 @@ namespace GCNet
                 request.Controls.Add(searchOptions);
             }
 
-            AppConsole.LiveCounter("Notifications received total", 0);
+            //AppConsole.LiveCounter("Notifications received total", 0);
 
             AsyncCallback callback = ar =>
             {
@@ -222,8 +220,10 @@ namespace GCNet
             attributes.AddRange(trackedAttributes);
             var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, attributes.ToArray());
             request.Controls.Add(new PageResultRequestControl(1000));
+            /*
             DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
             request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
+            */
             request.Controls.Add(new DomainScopeControl());
 
             var loadedCount = 0;
