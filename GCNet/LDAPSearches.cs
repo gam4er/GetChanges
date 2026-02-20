@@ -41,7 +41,7 @@ namespace GCNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                AppConsole.WriteException(ex, "dc-schema: failed to read schemaNamingContext");
                 return null;
             }
         }
@@ -53,7 +53,7 @@ namespace GCNet
 
             if (schemaNamingContext == null)
             {
-                Console.WriteLine("Failed to retrieve schema naming context.");
+                AppConsole.Log("dc-schema: schemaNamingContext is unavailable");
                 return attributeDictionary;
             }
 
@@ -74,10 +74,6 @@ namespace GCNet
                     foreach (SearchResultEntry entry in searchResponse.Entries)
                     {
                         string attributeName = entry.Attributes["lDAPDisplayName"][0].ToString();
-                        if (attributeName == "directReports")
-                        {
-                            Console.WriteLine("directReports attribute.");
-                        }
                         string attributeSyntax = entry.Attributes["attributeSyntax"][0].ToString();
                         attributeDictionary[attributeName] = attributeSyntax;
                     }
@@ -93,7 +89,7 @@ namespace GCNet
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Error: " + ex.Message);
+                AppConsole.WriteException(ex, "dc-schema: failed to load attribute schema entries");
             }
 
             return attributeDictionary;
