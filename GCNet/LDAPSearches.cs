@@ -10,27 +10,64 @@ using System.Net.NetworkInformation;
 
 namespace GCNet
 {
-    internal class LDAPSearches
+    internal interface IDomainControllerSelector
     {
-        private static readonly object DcSelectionLock = new object();
-        private static readonly List<string> FallbackDomainControllers = new List<string>();
-        private static int FallbackCursor;
+        string SelectBestDomainController(Options options, out string reason);
+    }
+
+    internal interface ILdapConnectionFactory
+    {
+        LdapConnection CreateBoundConnection(Options options);
+    }
+
+    internal interface ILdapSchemaHelper
+    {
+        string GetSchemaNamingContext(LdapConnection ldapConnection);
+        Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection);
+    }
+
+    internal sealed class LDAPSearches
+    {
+        private static readonly IDomainControllerSelector DomainControllerSelector = new DomainControllerSelector();
+        private static readonly ILdapConnectionFactory ConnectionFactory = new LdapConnectionFactory(DomainControllerSelector);
+        private static readonly ILdapSchemaHelper SchemaHelper = new LdapSchemaHelper();
 
         public static LdapConnection CreateBoundConnection(Options options)
         {
-            return InitializeConnection(options);
+            return ConnectionFactory.CreateBoundConnection(options);
         }
 
         public static string GetSchemaNamingContext(LdapConnection ldapConnection)
         {
+            return SchemaHelper.GetSchemaNamingContext(ldapConnection);
+        }
+
+        public static Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
+        {
+            return SchemaHelper.GetAllAttributes(ldapConnection);
+        }
+
+        public static string GetUserOU()
+        {
+            var user = UserPrincipal.Current;
+            DirectoryEntry deUser = user.GetUnderlyingObject() as DirectoryEntry;
+            DirectoryEntry deUserContainer = deUser.Parent;
+            return deUserContainer.Properties["distinguishedName"].Value.ToString();
+        }
+
+        public static string SelectBestDomainController(Options options, out string reason)
+        {
+            return DomainControllerSelector.SelectBestDomainController(options, out reason);
+        }
+    }
+
+    internal sealed class LdapSchemaHelper : ILdapSchemaHelper
+    {
+        public string GetSchemaNamingContext(LdapConnection ldapConnection)
+        {
             try
             {
-                var request = new SearchRequest(
-                    null,
-                    "(objectClass=*)",
-                    System.DirectoryServices.Protocols.SearchScope.Base,
-                    "schemaNamingContext");
-
+                var request = new SearchRequest(null, "(objectClass=*)", SearchScope.Base, "schemaNamingContext");
                 var response = (SearchResponse)ldapConnection.SendRequest(request);
                 if (response.Entries.Count == 1)
                 {
@@ -46,7 +83,7 @@ namespace GCNet
             }
         }
 
-        public static Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
+        public Dictionary<string, string> GetAllAttributes(LdapConnection ldapConnection)
         {
             var attributeDictionary = new Dictionary<string, string>();
             string schemaNamingContext = GetSchemaNamingContext(ldapConnection);
@@ -60,17 +97,12 @@ namespace GCNet
             try
             {
                 var pageResultRequestControl = new PageResultRequestControl(1000);
-                var searchRequest = new SearchRequest(
-                    schemaNamingContext,
-                    "(objectClass=attributeSchema)",
-                    System.DirectoryServices.Protocols.SearchScope.Subtree,
-                    null);
+                var searchRequest = new SearchRequest(schemaNamingContext, "(objectClass=attributeSchema)", SearchScope.Subtree, null);
                 searchRequest.Controls.Add(pageResultRequestControl);
 
                 while (true)
                 {
                     var searchResponse = (SearchResponse)ldapConnection.SendRequest(searchRequest);
-
                     foreach (SearchResultEntry entry in searchResponse.Entries)
                     {
                         string attributeName = entry.Attributes["lDAPDisplayName"][0].ToString();
@@ -94,18 +126,20 @@ namespace GCNet
 
             return attributeDictionary;
         }
+    }
 
-        public static string GetUserOU()
+    internal sealed class LdapConnectionFactory : ILdapConnectionFactory
+    {
+        private readonly IDomainControllerSelector _domainControllerSelector;
+
+        public LdapConnectionFactory(IDomainControllerSelector domainControllerSelector)
         {
-            var user = UserPrincipal.Current;
-            DirectoryEntry deUser = user.GetUnderlyingObject() as DirectoryEntry;
-            DirectoryEntry deUserContainer = deUser.Parent;
-            return deUserContainer.Properties["distinguishedName"].Value.ToString();
+            _domainControllerSelector = domainControllerSelector;
         }
 
-        public static LdapConnection InitializeConnection(Options options)
+        public LdapConnection CreateBoundConnection(Options options)
         {
-            var selectedDc = SelectBestDomainController(options, out var selectionReason);
+            var selectedDc = _domainControllerSelector.SelectBestDomainController(options, out var selectionReason);
             if (string.IsNullOrWhiteSpace(selectedDc))
             {
                 throw new InvalidOperationException("Unable to select domain controller for LDAP connection.");
@@ -113,17 +147,19 @@ namespace GCNet
 
             AppConsole.Log("dc-selected: " + selectedDc + " (reason: " + selectionReason + ")");
 
-            LdapDirectoryIdentifier identifier = new LdapDirectoryIdentifier(selectedDc);
-            LdapConnection connection = new LdapConnection(identifier);
+            var identifier = new LdapDirectoryIdentifier(selectedDc);
+            var connection = new LdapConnection(identifier)
+            {
+                Timeout = TimeSpan.FromHours(1),
+                AuthType = AuthType.Negotiate,
+                AutoBind = true
+            };
 
-            connection.Timeout = TimeSpan.FromHours(1);
             connection.SessionOptions.ProtocolVersion = 3;
-            connection.AuthType = AuthType.Negotiate;
             connection.SessionOptions.AutoReconnect = true;
             connection.SessionOptions.ReferralChasing = ReferralChasingOptions.None;
             TryConfigureKeepAlive(connection.SessionOptions);
             connection.SessionOptions.VerifyServerCertificate = new VerifyServerCertificateCallback((con, cer) => false);
-            connection.AutoBind = true;
 
             try
             {
@@ -139,7 +175,38 @@ namespace GCNet
             return connection;
         }
 
-        public static string SelectBestDomainController(Options options, out string reason)
+        private static void TryConfigureKeepAlive(LdapSessionOptions sessionOptions)
+        {
+            TrySetSessionOption(sessionOptions, "PingKeepAliveTimeout", TimeSpan.FromMinutes(2));
+            TrySetSessionOption(sessionOptions, "PingWaitTimeout", TimeSpan.FromSeconds(30));
+            TrySetSessionOption(sessionOptions, "TcpKeepAlive", true);
+        }
+
+        private static void TrySetSessionOption(LdapSessionOptions sessionOptions, string propertyName, object value)
+        {
+            var propertyInfo = typeof(LdapSessionOptions).GetProperty(propertyName);
+            if (propertyInfo == null || !propertyInfo.CanWrite)
+            {
+                return;
+            }
+
+            try
+            {
+                propertyInfo.SetValue(sessionOptions, value);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    internal sealed class DomainControllerSelector : IDomainControllerSelector
+    {
+        private static readonly object DcSelectionLock = new object();
+        private static readonly List<string> FallbackDomainControllers = new List<string>();
+        private static int FallbackCursor;
+
+        public string SelectBestDomainController(Options options, out string reason)
         {
             var mode = (options.DomainControllerSelectionMode ?? "auto").Trim().ToLowerInvariant();
             if (mode == "manual")
@@ -156,6 +223,7 @@ namespace GCNet
                     FallbackDomainControllers.Add(options.DomainController.Trim());
                     FallbackCursor = 0;
                 }
+
                 return options.DomainController.Trim();
             }
 
@@ -199,8 +267,9 @@ namespace GCNet
 
             var localSite = GetLocalSiteName();
             var ordered = healthy
-                .OrderBy(x => options.PreferSiteLocal && !string.IsNullOrWhiteSpace(localSite) &&
-                              !string.Equals(x.SiteName, localSite, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => options.PreferSiteLocal
+                              && !string.IsNullOrWhiteSpace(localSite)
+                              && !string.Equals(x.SiteName, localSite, StringComparison.OrdinalIgnoreCase))
                 .ThenBy(x => x.RoundTripTimeMs)
                 .ThenBy(x => x.Fqdn, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -216,8 +285,7 @@ namespace GCNet
 
                 if (selectedIndex == 0)
                 {
-                    reason = "best healthy DC by RTT" +
-                             (options.PreferSiteLocal ? " with local-site preference" : string.Empty);
+                    reason = "best healthy DC by RTT" + (options.PreferSiteLocal ? " with local-site preference" : string.Empty);
                 }
                 else
                 {
@@ -325,30 +393,6 @@ namespace GCNet
                     RoundTripTimeMs = long.MaxValue,
                     FailureReason = ex.Message
                 };
-            }
-        }
-
-        private static void TryConfigureKeepAlive(LdapSessionOptions sessionOptions)
-        {
-            TrySetSessionOption(sessionOptions, "PingKeepAliveTimeout", TimeSpan.FromMinutes(2));
-            TrySetSessionOption(sessionOptions, "PingWaitTimeout", TimeSpan.FromSeconds(30));
-            TrySetSessionOption(sessionOptions, "TcpKeepAlive", true);
-        }
-
-        private static void TrySetSessionOption(LdapSessionOptions sessionOptions, string propertyName, object value)
-        {
-            var propertyInfo = typeof(LdapSessionOptions).GetProperty(propertyName);
-            if (propertyInfo == null || !propertyInfo.CanWrite)
-            {
-                return;
-            }
-
-            try
-            {
-                propertyInfo.SetValue(sessionOptions, value);
-            }
-            catch
-            {
             }
         }
 
