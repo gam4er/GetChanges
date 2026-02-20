@@ -222,6 +222,9 @@ namespace GCNet
             attributes.AddRange(trackedAttributes);
             var request = new SearchRequest(baseDn, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, attributes.ToArray());
             request.Controls.Add(new PageResultRequestControl(1000));
+            DirectoryControl LDAP_SERVER_LAZY_COMMIT_OID = new DirectoryControl("1.2.840.113556.1.4.619", null, true, true);
+            request.Controls.Add(LDAP_SERVER_LAZY_COMMIT_OID);
+            request.Controls.Add(new DomainScopeControl());
 
             var loadedCount = 0;
 
