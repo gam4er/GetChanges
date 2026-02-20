@@ -69,10 +69,10 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 - атрибутами `*` и `objectGUID`;
 - контролами:
   - `DirectoryNotificationControl`,
-  - `1.2.840.113556.1.4.619` (LDAP_SERVER_LAZY_COMMIT_OID),
+  - `DomainScopeControl`,
   - `1.2.840.113556.1.4.417` (show deleted),
   - `1.2.840.113556.1.4.2064` (show recycled),
-  - `SearchOptionsControl(SearchOption.PhantomRoot)`.
+  - `SearchOptionsControl(SearchOption.PhantomRoot)` **только при `--phantom-root`**.
 
 Пояснение по `SearchOption.PhantomRoot`:
 
@@ -119,11 +119,34 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 - `--base-dn` — корневой DN для поиска (если не указан, берётся `defaultNamingContext`)
 - `--enrich-metadata` — включить обогащение `msDS-ReplAttributeMetaData`
 - `--tracked-attributes` — список атрибутов через запятую; включает режим фильтрации/диффа
+- `--dn-ignore-list` — путь к файлу с DN-фильтрами для игнорирования (по умолчанию `dn-ignore-default.txt`, см. `DefaultDnIgnoreListPath`)
+- `--phantom-root` — добавить `SearchOptionsControl(SearchOption.PhantomRoot)` в notification search
+- `--dc` — явный FQDN контроллера домена для LDAP-подключения
+- `--dc-selection` — режим выбора DC:
+  - `auto` (по умолчанию) — автоматический выбор здорового DC; если одновременно задан `--dc`, он используется как fallback;
+  - `manual` — принудительно использовать `--dc`; при `--dc-selection=manual` параметр `--dc` обязателен.
+- `--prefer-site-local` — при `--dc-selection=auto` предпочитать здоровые DC из локального AD-сайта (по умолчанию `true`)
+
+Поведение по умолчанию:
+
+- `--dn-ignore-list` по умолчанию указывает на `dn-ignore-default.txt` (`DefaultDnIgnoreListPath`). Если файла нет, он создаётся автоматически с шаблонным комментарием.
+- `--dc-selection` по умолчанию `auto`; `manual` требует обязательный `--dc`.
+- `--prefer-site-local` по умолчанию включён (`true`) и влияет на ранжирование кандидатов DC в `auto`-режиме.
 
 Пример:
 
 ```bash
 GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,adminCount,userAccountControl" --enrich-metadata -o changes.json
+```
+
+Дополнительные примеры:
+
+```bash
+# manual DC selection (обязателен --dc)
+GCNet.exe --dc-selection manual --dc dc01.corp.local --base-dn "DC=corp,DC=local" -o changes-manual.json
+
+# auto mode с fallback на --dc
+GCNet.exe --dc-selection auto --dc dc-fallback.corp.local --prefer-site-local --phantom-root -o changes-auto.json
 ```
 
 ---
