@@ -49,6 +49,8 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 - если передан `--base-dn`, используется он;
 - иначе берётся `defaultNamingContext` через `GetBaseDn()` (запрос к RootDSE).
 
+Важно: выбранный DN в обоих случаях — это **стартовая база LDAP-запроса** (`baseDn` в `SearchRequest`), от которой начинается подписка.
+
 ### 4) Подготовка baseline (если включён список tracked-атрибутов)
 
 Если задан `--tracked-attributes`, приложение:
@@ -71,6 +73,13 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
   - `1.2.840.113556.1.4.417` (show deleted),
   - `1.2.840.113556.1.4.2064` (show recycled),
   - `SearchOptionsControl(SearchOption.PhantomRoot)`.
+
+Пояснение по `SearchOption.PhantomRoot`:
+
+- включает режим виртуального корня (PhantomRoot) на подключённом DC;
+- фактический охват поиска может выходить за пределы одного naming context (NC);
+- это **не** гарантия «всех контекстов всего леса на всех DC»;
+- итоговый набор событий зависит от того, к какому DC вы подключены, и от прав учётной записи.
 
 Далее запускается `BeginSendRequest(... ReturnPartialResultsAndNotifyCallback ...)`, и каждый `SearchResultEntry` поступает в очередь обработки.
 
@@ -203,4 +212,3 @@ GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,adminCount,u
 4. Запустите и оставьте процесс работать.
 5. Для остановки нажмите ENTER.
 6. Передайте JSON в ваш аналитический пайплайн.
-
