@@ -592,6 +592,8 @@ namespace GCNet
         {
             var diagnostics = new StringBuilder();
 
+            diagnostics.Append("LDAP HResult: 0x").Append(ex.HResult.ToString("X8")).Append(" int");
+
             var directoryOperationException = ex as DirectoryOperationException ?? ex.InnerException as DirectoryOperationException;
             if (directoryOperationException?.Response != null)
             {
