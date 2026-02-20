@@ -95,9 +95,16 @@ namespace GCNet
                 var previousValue = previousSnapshot != null && previousSnapshot.ContainsKey(attribute)
                     ? previousSnapshot[attribute]
                     : "null";
+                var currentValue = currentSnapshot[attribute];
+
+                if (string.Equals(previousValue, currentValue, StringComparison.Ordinal))
+                {
+                    properties[attribute] = DeserializeCanonical(currentValue);
+                    continue;
+                }
 
                 properties[attribute + "_old"] = DeserializeCanonical(previousValue);
-                properties[attribute + "_new"] = DeserializeCanonical(currentSnapshot[attribute]);
+                properties[attribute + "_new"] = DeserializeCanonical(currentValue);
             }
         }
 
