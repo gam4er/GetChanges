@@ -162,7 +162,7 @@ namespace GCNet
 
         private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)
         {
-            var targetPath = string.IsNullOrWhiteSpace(path) ? "dn-ignore-default.txt" : path;
+            var targetPath = string.IsNullOrWhiteSpace(path) ? Options.DefaultDnIgnoreListPath : path;
 
             if (!File.Exists(targetPath))
             {
