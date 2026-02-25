@@ -223,7 +223,7 @@
     <Compile Include="ChangeModels.cs" />
     <Compile Include="ChangeMonitorApplication.cs" />
     <Compile Include="ChangeProcessingPipeline.cs" />
-    <Compile Include="JsonArrayFileWriter.cs" />
+    <Compile Include="EventFileWriter.cs" />
     <Compile Include="LdapEntryParser.cs" />
     <Compile Include="LdapNotificationLoopService.cs" />
     <Compile Include="LDAPSearches.cs" />

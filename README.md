@@ -1,6 +1,6 @@
 # GCNet
 
-GCNet — консольный инструмент для мониторинга изменений в Active Directory через LDAP-уведомления (`DirectoryNotificationControl`) с выводом событий в JSON-массив, совместимый с дальнейшей аналитикой (в т.ч. в стиле BloodHound-пайплайнов).
+GCNet — консольный инструмент для мониторинга изменений в Active Directory через LDAP-уведомления (`DirectoryNotificationControl`) с записью каждого события в отдельный JSON-файл, совместимый с дальнейшей аналитикой (в т.ч. в стиле BloodHound-пайплайнов).
 
 Этот README описывает **только основной проект `GCNet`**.
 
@@ -101,13 +101,11 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 
 ### 7) Запись результата
 
-`JsonArrayFileWriter`:
+`EventFileWriter`:
 
-- открывает JSON-массив (`[`),
-- последовательно сериализует объекты,
-- при завершении закрывает массив (`]`).
-
-Файл всегда остаётся валидным JSON при штатном завершении.
+- как только событие попадает в очередь на запись, сразу пишет его на диск в отдельный JSON-файл;
+- имя файла формируется как `timestamp + "_" + DN`, с очисткой символов, недопустимых в именах файлов;
+- файлы создаются в рабочем каталоге процесса.
 
 ---
 
@@ -115,7 +113,6 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 
 `GCNet/Options.cs`:
 
-- `-o, --output` — путь к выходному JSON (по умолчанию `result.json`)
 - `--base-dn` — корневой DN для поиска (если не указан, берётся `defaultNamingContext`)
 - `--enrich-metadata` — включить обогащение `msDS-ReplAttributeMetaData`
 - `--tracked-attributes` — список атрибутов через запятую; включает режим фильтрации/диффа
@@ -136,17 +133,17 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 Пример:
 
 ```bash
-GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,adminCount,userAccountControl" --enrich-metadata -o changes.json
+GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,adminCount,userAccountControl" --enrich-metadata
 ```
 
 Дополнительные примеры:
 
 ```bash
 # manual DC selection (обязателен --dc)
-GCNet.exe --dc-selection manual --dc dc01.corp.local --base-dn "DC=corp,DC=local" -o changes-manual.json
+GCNet.exe --dc-selection manual --dc dc01.corp.local --base-dn "DC=corp,DC=local"
 
 # auto mode с fallback на --dc
-GCNet.exe --dc-selection auto --dc dc-fallback.corp.local --prefer-site-local --phantom-root -o changes-auto.json
+GCNet.exe --dc-selection auto --dc dc-fallback.corp.local --prefer-site-local --phantom-root
 ```
 
 ---
@@ -211,17 +208,17 @@ GCNet.exe --dc-selection auto --dc dc-fallback.corp.local --prefer-site-local --
 - `GCNet.cs` — entrypoint и запуск приложения;
 - `Options.cs` — CLI-опции;
 - `ChangeMonitorApplication.cs` — orchestration жизненного цикла (connect → monitor → stop);
-- `ChangeProcessingPipeline.cs` — фильтрация, diff tracked-атрибутов, enrichment, маршрутизация в output;
+- `ChangeProcessingPipeline.cs` — фильтрация, diff tracked-атрибутов, enrichment, маршрутизация в writer-очередь;
 - `MetadataEnricher.cs` — загрузка и парсинг `msDS-ReplAttributeMetaData`;
 - `LDAPSearches.cs` — LDAP utility-методы и инициализация подключения;
-- `JsonArrayFileWriter.cs` — потоковая запись валидного JSON-массива;
+- `EventFileWriter` (в `GCNet/EventFileWriter.cs`) — запись каждого события в отдельный JSON-файл;
 - `ChangeModels.cs` — модели `ChangeEvent`, `BaselineEntry`.
 
 ---
 
 ## Безопасность и эксплуатационные замечания
 
-- Приложение пишет потенциально чувствительные атрибуты AD в файл — храните output как чувствительные данные.
+- Приложение пишет потенциально чувствительные атрибуты AD в файлы — храните output как чувствительные данные.
 - В `InitializeConnection()` отключена проверка серверного сертификата (`VerifyServerCertificate => false`) — учитывайте это в защищённых контурах и при аудитах.
 - При мониторинге больших областей DN поток событий может быть высоким; закладывайте место на диске и контролируйте ротацию файлов на стороне эксплуатации.
 

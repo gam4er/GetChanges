@@ -56,7 +56,7 @@ namespace GCNet
                 MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
 
-                using (var writer = new JsonArrayFileWriter(options.OutputPath))
+                using (var writer = new EventFileWriter())
                 {
                     var worker = pipeline.StartAsync(lifecycle.Token);
                     var writerTask = StartWriterLoop(pipeline, writer, lifecycle.Token);
@@ -99,7 +99,7 @@ namespace GCNet
             };
         }
 
-        private static Task StartWriterLoop(ChangeProcessingPipeline pipeline, JsonArrayFileWriter writer, CancellationToken cancellationToken)
+        private static Task StartWriterLoop(ChangeProcessingPipeline pipeline, EventFileWriter writer, CancellationToken cancellationToken)
         {
             return Task.Run(() =>
             {
@@ -107,7 +107,7 @@ namespace GCNet
                 {
                     foreach (var item in pipeline.Outgoing.GetConsumingEnumerable(cancellationToken))
                     {
-                        writer.WriteObject(item);
+                        writer.WriteEvent(item);
                     }
                 }
                 catch (OperationCanceledException)

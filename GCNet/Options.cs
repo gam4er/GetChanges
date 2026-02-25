@@ -6,9 +6,6 @@ namespace GCNet
     {
         public const string DefaultDnIgnoreListPath = "dn-ignore-default.txt";
 
-        [Option('o', "output", Required = false, Default = "result.json", HelpText = "Output JSON file path.")]
-        public string OutputPath { get; set; }
-
         [Option("base-dn", Required = false, HelpText = "Base DN for all searches. If omitted, defaultNamingContext is used.")]
         public string BaseDn { get; set; }
 
