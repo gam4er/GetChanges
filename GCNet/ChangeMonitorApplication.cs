@@ -56,7 +56,7 @@ namespace GCNet
                 MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
 
-                using (var writer = new EventFileWriter())
+                using (var writer = new EventFileWriter(options.OutputDirectory))
                 {
                     var worker = pipeline.StartAsync(lifecycle.Token);
                     var writerTask = StartWriterLoop(pipeline, writer, lifecycle.Token);

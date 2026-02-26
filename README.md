@@ -105,7 +105,7 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 
 - как только событие попадает в очередь на запись, сразу пишет его на диск в отдельный JSON-файл;
 - имя файла формируется как `timestamp + "_" + DN`, с очисткой символов, недопустимых в именах файлов;
-- файлы создаются в рабочем каталоге процесса.
+- файлы создаются в каталоге `--output-dir` (по умолчанию `.\output`; путь может быть абсолютным или относительным, например `.\folder`).
 
 ---
 
@@ -117,6 +117,7 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 - `--enrich-metadata` — включить обогащение `msDS-ReplAttributeMetaData`
 - `--tracked-attributes` — список атрибутов через запятую; включает режим фильтрации/диффа
 - `--dn-ignore-list` — путь к файлу с DN-фильтрами для игнорирования (по умолчанию `dn-ignore-default.txt`, см. `DefaultDnIgnoreListPath`)
+- `--output-dir` — каталог для JSON-файлов с событиями (абсолютный или относительный путь; по умолчанию `.\output`, см. `DefaultOutputDirectoryPath`)
 - `--phantom-root` — добавить `SearchOptionsControl(SearchOption.PhantomRoot)` в notification search
 - `--dc` — явный FQDN контроллера домена для LDAP-подключения
 - `--dc-selection` — режим выбора DC:
@@ -127,6 +128,7 @@ CLI-параметры описаны в `GCNet/Options.cs` через `CommandL
 Поведение по умолчанию:
 
 - `--dn-ignore-list` по умолчанию указывает на `dn-ignore-default.txt` (`DefaultDnIgnoreListPath`). Если файла нет, он создаётся автоматически с шаблонным комментарием.
+- `--output-dir` по умолчанию указывает на `.\output` (`DefaultOutputDirectoryPath`). Каталог создаётся автоматически, если отсутствует.
 - `--dc-selection` по умолчанию `auto`; `manual` требует обязательный `--dc`.
 - `--prefer-site-local` по умолчанию включён (`true`) и влияет на ранжирование кандидатов DC в `auto`-режиме.
 

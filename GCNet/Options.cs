@@ -5,6 +5,7 @@ namespace GCNet
     internal class Options
     {
         public const string DefaultDnIgnoreListPath = "dn-ignore-default.txt";
+        public const string DefaultOutputDirectoryPath = @".\output";
 
         [Option("base-dn", Required = false, HelpText = "Base DN for all searches. If omitted, defaultNamingContext is used.")]
         public string BaseDn { get; set; }
@@ -17,6 +18,9 @@ namespace GCNet
 
         [Option("dn-ignore-list", Required = false, Default = DefaultDnIgnoreListPath, HelpText = "Path to a file with DN filters to ignore (one per line).")]
         public string DnIgnoreListPath { get; set; }
+
+        [Option("output-dir", Required = false, Default = DefaultOutputDirectoryPath, HelpText = "Directory path for JSON events (absolute or relative, e.g. .\\folder).")]
+        public string OutputDirectory { get; set; }
 
         [Option("phantom-root", Required = false, Default = false, HelpText = "Enable LDAP SearchOption.PhantomRoot for notification search.")]
         public bool UsePhantomRoot { get; set; }

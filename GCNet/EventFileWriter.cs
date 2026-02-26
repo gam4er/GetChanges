@@ -12,12 +12,10 @@ namespace GCNet
         private const int MaxFileStemLength = 180;
         private readonly object _sync = new object();
         private readonly string _outputDirectory;
+
         public EventFileWriter(string outputDirectory = null)
         {
-            _outputDirectory = string.IsNullOrWhiteSpace(outputDirectory)
-                ? Environment.CurrentDirectory
-                : outputDirectory;
-            Directory.CreateDirectory(_outputDirectory);
+            _outputDirectory = ResolveOutputDirectory(outputDirectory);
         }
 
         public void WriteEvent(Dictionary<string, object> evt)
@@ -77,6 +75,22 @@ namespace GCNet
             }
 
             return DateTimeOffset.UtcNow;
+        }
+
+        private static string ResolveOutputDirectory(string outputDirectory)
+        {
+            var configuredPath = string.IsNullOrWhiteSpace(outputDirectory)
+                ? Options.DefaultOutputDirectoryPath
+                : outputDirectory.Trim();
+
+            var fullPath = Path.GetFullPath(configuredPath);
+            if (File.Exists(fullPath))
+            {
+                throw new IOException("Output directory path points to an existing file: " + fullPath);
+            }
+
+            Directory.CreateDirectory(fullPath);
+            return fullPath;
         }
 
         private string GetUniquePath(string baseName)
