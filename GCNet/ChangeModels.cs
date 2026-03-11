@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.DirectoryServices.Protocols;
 
 namespace GCNet
 {
@@ -7,6 +8,7 @@ namespace GCNet
     {
         public Guid? ObjectGuid { get; set; }
         public string DistinguishedName { get; set; }
+        public SearchResultEntry Entry { get; set; }
         public Dictionary<string, object> Properties { get; set; }
     }
 

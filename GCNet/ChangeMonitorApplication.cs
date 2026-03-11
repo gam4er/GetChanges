@@ -53,7 +53,7 @@ namespace GCNet
                     _baselineSnapshotLoader.LoadInitialSnapshot(connection, baseDn, trackedAttributes, _baseline);
                 }
 
-                MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connection) : null;
+                MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connectionFactory) : null;
                 var pipeline = new ChangeProcessingPipeline(_baseline, trackedAttributes, options.EnrichMetadata, metadataEnricher);
 
                 using (var writer = new EventFileWriter(options.OutputDirectory))

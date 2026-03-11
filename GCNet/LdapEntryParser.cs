@@ -5,17 +5,35 @@ using System.Collections.Generic;
 using System.DirectoryServices.Protocols;
 using System.Linq;
 using System.Security.AccessControl;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace GCNet
 {
     internal interface ILdapEntryParser
     {
         Guid? ReadObjectGuid(SearchResultEntry entry);
-        Dictionary<string, object> ParseEntry(SearchResultEntry entry);
+        Task<Dictionary<string, object>> ParseEntryAsync(SearchResultEntry entry, CancellationToken cancellationToken);
     }
 
     internal sealed class LdapEntryParser : ILdapEntryParser
     {
+        private readonly ILdapUtils _ldapUtils;
+        private readonly LdapPropertyProcessor _processor;
+        private readonly string _currentDomain;
+
+        public LdapEntryParser()
+            : this(new LdapUtils(), GetCurrentDomain())
+        {
+        }
+
+        internal LdapEntryParser(ILdapUtils ldapUtils, string currentDomain)
+        {
+            _ldapUtils = ldapUtils ?? throw new ArgumentNullException(nameof(ldapUtils));
+            _processor = new LdapPropertyProcessor(_ldapUtils);
+            _currentDomain = currentDomain ?? string.Empty;
+        }
+
         public Guid? ReadObjectGuid(SearchResultEntry entry)
         {
             if (!entry.Attributes.Contains("objectGUID"))
@@ -32,13 +50,15 @@ namespace GCNet
             return new Guid(bytes);
         }
 
-        public Dictionary<string, object> ParseEntry(SearchResultEntry entry)
+        public async Task<Dictionary<string, object>> ParseEntryAsync(SearchResultEntry entry, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var wrapper = new SearchResultEntryWrapper(entry);
-            ILdapUtils ldapUtils = new LdapUtils();
-            var processor = new LdapPropertyProcessor(ldapUtils);
-            var properties = processor.ParseAllProperties(wrapper);
-            var userProperties = processor.ReadUserProperties(wrapper, GetCurrentDomain()).Result;
+            var properties = new Dictionary<string, object>(
+                _processor.ParseAllProperties(wrapper),
+                StringComparer.OrdinalIgnoreCase);
+            var userProperties = await _processor.ReadUserProperties(wrapper, _currentDomain).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             foreach (var p in userProperties.Props)
             {

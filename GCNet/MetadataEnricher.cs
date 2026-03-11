@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.DirectoryServices.Protocols;
@@ -6,62 +5,129 @@ using System.Xml.Linq;
 
 namespace GCNet
 {
-    internal sealed class MetadataEnricher
+    internal interface IMetadataEnricher
     {
-        private readonly LdapConnection _connection;
+        MetadataEnrichmentResult TryLoadMetadata(string distinguishedName);
+    }
 
-        public MetadataEnricher(LdapConnection connection)
+    internal sealed class MetadataEnrichmentResult
+    {
+        public IReadOnlyList<Dictionary<string, string>> Metadata { get; set; }
+        public string Error { get; set; }
+        public bool HasError => !string.IsNullOrWhiteSpace(Error);
+    }
+
+    internal sealed class MetadataEnricher : IMetadataEnricher, IDisposable
+    {
+        private readonly Func<LdapConnection> _connectionFactory;
+        private readonly object _sync = new object();
+        private LdapConnection _connection;
+
+        public MetadataEnricher(Func<LdapConnection> connectionFactory)
         {
-            _connection = connection;
+            _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         }
 
-        public IReadOnlyList<Dictionary<string, string>> LoadMetadata(string distinguishedName)
+        public MetadataEnrichmentResult TryLoadMetadata(string distinguishedName)
         {
-            var request = new SearchRequest(
-                distinguishedName,
-                "(objectClass=*)",
-                SearchScope.Base,
-                "msDS-ReplAttributeMetaData");
-
-            var response = (SearchResponse)_connection.SendRequest(request);
             var result = new List<Dictionary<string, string>>();
-
-            if (response.Entries.Count == 0 || !response.Entries[0].Attributes.Contains("msDS-ReplAttributeMetaData"))
+            try
             {
-                return result;
-            }
+                var response = SendMetadataRequest(distinguishedName, allowReconnect: true);
+                if (response.Entries.Count == 0 || !response.Entries[0].Attributes.Contains("msDS-ReplAttributeMetaData"))
+                {
+                    return new MetadataEnrichmentResult { Metadata = result };
+                }
 
-            foreach (var raw in response.Entries[0].Attributes["msDS-ReplAttributeMetaData"].GetValues(typeof(string)))
+                foreach (var raw in response.Entries[0].Attributes["msDS-ReplAttributeMetaData"].GetValues(typeof(string)))
+                {
+                    var text = raw?.ToString();
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var doc = XDocument.Parse(text);
+                        result.Add(new Dictionary<string, string>
+                        {
+                            ["attributeName"] = doc.Root?.Element("pszAttributeName")?.Value,
+                            ["version"] = doc.Root?.Element("dwVersion")?.Value,
+                            ["lastChangeTime"] = doc.Root?.Element("ftimeLastOriginatingChange")?.Value,
+                            ["changedBy"] = doc.Root?.Element("pszLastOriginatingDsaDN")?.Value,
+                            ["raw"] = text
+                        });
+                    }
+                    catch
+                    {
+                        result.Add(new Dictionary<string, string>
+                        {
+                            ["raw"] = text,
+                            ["parseError"] = "Unable to parse metadata XML"
+                        });
+                    }
+                }
+
+                return new MetadataEnrichmentResult { Metadata = result };
+            }
+            catch (Exception ex)
             {
-                var text = raw?.ToString();
-                if (string.IsNullOrWhiteSpace(text))
+                return new MetadataEnrichmentResult
                 {
-                    continue;
-                }
-
-                try
-                {
-                    var doc = XDocument.Parse(text);
-                    result.Add(new Dictionary<string, string>
-                    {
-                        ["attributeName"] = doc.Root?.Element("pszAttributeName")?.Value,
-                        ["version"] = doc.Root?.Element("dwVersion")?.Value,
-                        ["lastChangeTime"] = doc.Root?.Element("ftimeLastOriginatingChange")?.Value,
-                        ["changedBy"] = doc.Root?.Element("pszLastOriginatingDsaDN")?.Value,
-                        ["raw"] = text
-                    });
-                }
-                catch
-                {
-                    result.Add(new Dictionary<string, string>
-                    {
-                        ["raw"] = text,
-                        ["parseError"] = "Unable to parse metadata XML"
-                    });
-                }
+                    Metadata = result,
+                    Error = ex.GetType().Name + ": " + ex.Message
+                };
             }
+        }
 
-            return result;
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                _connection?.Dispose();
+                _connection = null;
+            }
+        }
+
+        private SearchResponse SendMetadataRequest(string distinguishedName, bool allowReconnect)
+        {
+            try
+            {
+                var request = new SearchRequest(
+                    distinguishedName,
+                    "(objectClass=*)",
+                    SearchScope.Base,
+                    "msDS-ReplAttributeMetaData");
+                return (SearchResponse)GetConnection().SendRequest(request);
+            }
+            catch when (allowReconnect)
+            {
+                ResetConnection();
+                return SendMetadataRequest(distinguishedName, allowReconnect: false);
+            }
+        }
+
+        private LdapConnection GetConnection()
+        {
+            lock (_sync)
+            {
+                if (_connection == null)
+                {
+                    _connection = _connectionFactory();
+                }
+
+                return _connection;
+            }
+        }
+
+        private void ResetConnection()
+        {
+            lock (_sync)
+            {
+                _connection?.Dispose();
+                _connection = null;
+            }
         }
     }
 }

@@ -220,19 +220,23 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppConsole.cs" />
+    <Compile Include="CanonicalValueHelper.cs" />
     <Compile Include="ChangeModels.cs" />
     <Compile Include="ChangeMonitorApplication.cs" />
     <Compile Include="ChangeProcessingPipeline.cs" />
+    <Compile Include="DomainControllerSelector.cs" />
     <Compile Include="EventFileWriter.cs" />
+    <Compile Include="LdapConnectionFactory.cs" />
     <Compile Include="LdapEntryParser.cs" />
     <Compile Include="LdapNotificationLoopService.cs" />
-    <Compile Include="LDAPSearches.cs" />
+    <Compile Include="LdapSchemaHelper.cs" />
     <Compile Include="MetadataEnricher.cs" />
     <Compile Include="MonitoringLifecycleService.cs" />
     <Compile Include="ObjectKeyBuilder.cs" />
     <Compile Include="Options.cs" />
     <Compile Include="BaselineSnapshotLoader.cs" />
     <Compile Include="GCNet.cs" />
+    <Compile Include="PipelineMetrics.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

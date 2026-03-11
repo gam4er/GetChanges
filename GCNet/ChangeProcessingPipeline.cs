@@ -49,7 +49,7 @@ namespace GCNet
                         var shouldEnrich = _enrichMetadata && _metadataEnricher != null;
                         if (shouldEnrich)
                         {
-                            var metadata = _metadataEnricher.LoadMetadata(item.DistinguishedName);
+                            var metadata = _metadataEnricher.TryLoadMetadata(item.DistinguishedName);
                             item.Properties["msdsReplAttributeMetaData"] = metadata;
                         }
 
