@@ -14,7 +14,8 @@ namespace GCNet
             LdapConnection connection,
             string baseDn,
             IReadOnlyCollection<string> trackedAttributes,
-            ConcurrentDictionary<string, BaselineEntry> baseline);
+            ConcurrentDictionary<string, BaselineEntry> baseline,
+            StatusContext statusContext = null);
     }
 
     internal sealed class BaselineSnapshotLoader : IBaselineSnapshotLoader
@@ -30,7 +31,8 @@ namespace GCNet
             LdapConnection connection,
             string baseDn,
             IReadOnlyCollection<string> trackedAttributes,
-            ConcurrentDictionary<string, BaselineEntry> baseline)
+            ConcurrentDictionary<string, BaselineEntry> baseline,
+            StatusContext statusContext = null)
         {
             var filter = "(|" + string.Join(string.Empty, trackedAttributes.Select(a => "(" + a + "=*)")) + ")";
             var attributes = new List<string> { "objectGUID", "distinguishedName" };
@@ -41,56 +43,40 @@ namespace GCNet
 
             var loadedCount = 0;
 
-            AnsiConsole.Progress()
-                .AutoClear(false)
-                .HideCompleted(true)
-                .Columns(new ProgressColumn[]
+            while (true)
+            {
+                var response = (SearchResponse)connection.SendRequest(request);
+                foreach (SearchResultEntry entry in response.Entries)
                 {
-                    new TaskDescriptionColumn(),
-                    new SpinnerColumn()
-                })
-                .Start(ctx =>
-                {
-                    var task = ctx.AddTask("[green]Loading baseline[/]", autoStart: true);
-                    task.IsIndeterminate = true;
+                    var guid = _entryParser.ReadObjectGuid(entry);
+                    var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
 
-                    while (true)
+                    var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var properties = _entryParser.ParseEntryAsync(entry, new System.Threading.CancellationToken()).Result;
+                    foreach (var attr in trackedAttributes)
                     {
-                        var response = (SearchResponse)connection.SendRequest(request);
-                        foreach (SearchResultEntry entry in response.Entries)
-                        {
-                            var guid = _entryParser.ReadObjectGuid(entry);
-                            var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
-
-                            var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                            var properties = _entryParser.ParseEntryAsync(entry, new System.Threading.CancellationToken()).Result;
-                            foreach (var attr in trackedAttributes)
-                            {
-                                snapshot[attr] = CanonicalizeAttribute(properties, attr);
-                            }
-
-                            baseline[objectKey] = new BaselineEntry
-                            {
-                                DistinguishedName = entry.DistinguishedName,
-                                Attributes = snapshot
-                            };
-
-                            loadedCount++;
-                            task.Description($"[green]Loading baseline[/] [grey](objects: {loadedCount})[/]");
-                        }
-
-                        var page = response.Controls.OfType<PageResultResponseControl>().FirstOrDefault();
-                        if (page == null || page.Cookie == null || page.Cookie.Length == 0)
-                        {
-                            break;
-                        }
-
-                        var pageRequest = request.Controls.OfType<PageResultRequestControl>().First();
-                        pageRequest.Cookie = page.Cookie;
+                        snapshot[attr] = CanonicalizeAttribute(properties, attr);
                     }
 
-                    task.StopTask();
-                });
+                    baseline[objectKey] = new BaselineEntry
+                    {
+                        DistinguishedName = entry.DistinguishedName,
+                        Attributes = snapshot
+                    };
+
+                    loadedCount++;
+                    statusContext?.Status($"[green]Loading baseline[/] [grey](objects: {loadedCount})[/]");
+                }
+
+                var page = response.Controls.OfType<PageResultResponseControl>().FirstOrDefault();
+                if (page == null || page.Cookie == null || page.Cookie.Length == 0)
+                {
+                    break;
+                }
+
+                var pageRequest = request.Controls.OfType<PageResultRequestControl>().First();
+                pageRequest.Cookie = page.Cookie;
+            }
 
             AppConsole.Log("Loaded baseline for objects: " + baseline.Count);
         }

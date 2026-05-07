@@ -1,4 +1,5 @@
 using System;
+using Spectre.Console;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.DirectoryServices.Protocols;
@@ -16,6 +17,7 @@ namespace GCNet
         private readonly ILdapNotificationLoopService _notificationLoopService;
         private readonly IBaselineSnapshotLoader _baselineSnapshotLoader;
         private long _notificationCount;
+        private StatusContext _statusContext;
 
         public ChangeMonitorApplication()
             : this(
@@ -35,8 +37,9 @@ namespace GCNet
             _baselineSnapshotLoader = baselineSnapshotLoader;
         }
 
-        public int Run(Options options)
+        public int Run(Options options, StatusContext statusContext = null)
         {
+            _statusContext = statusContext;
             ValidateDomainControllerOptions(options);
             Func<LdapConnection> connectionFactory = () => _connectionFactory.CreateBoundConnection(options);
 
@@ -50,7 +53,7 @@ namespace GCNet
                 var trackedAttributes = ParseTrackedAttributes(options.TrackedAttributes);
                 if (trackedAttributes.Count > 0)
                 {
-                    _baselineSnapshotLoader.LoadInitialSnapshot(connection, baseDn, trackedAttributes, _baseline);
+                    _baselineSnapshotLoader.LoadInitialSnapshot(connection, baseDn, trackedAttributes, _baseline, _statusContext);
                 }
 
                 MetadataEnricher metadataEnricher = options.EnrichMetadata ? new MetadataEnricher(connectionFactory) : null;
@@ -153,7 +156,7 @@ namespace GCNet
         private void OnNotificationReceived()
         {
             var totalNotifications = Interlocked.Increment(ref _notificationCount);
-            AppConsole.LiveCounter("Notifications received total", totalNotifications);
+            _statusContext?.Status($"[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] Notifications received total: {totalNotifications}");
         }
 
         private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)
