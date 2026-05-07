@@ -202,7 +202,7 @@ namespace GCNet
                             continue;
                         }
 
-                        var properties = _entryParser.ParseEntry(entry);
+                        var properties = _entryParser.ParseEntryAsync(entry, new System.Threading.CancellationToken()).Result;
                         if (properties == null)
                         {
                             continue;

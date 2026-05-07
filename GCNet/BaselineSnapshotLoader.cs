@@ -63,7 +63,7 @@ namespace GCNet
                             var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
 
                             var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                            var properties = _entryParser.ParseEntry(entry);
+                            var properties = _entryParser.ParseEntryAsync(entry, new System.Threading.CancellationToken()).Result;
                             foreach (var attr in trackedAttributes)
                             {
                                 snapshot[attr] = CanonicalizeAttribute(properties, attr);
