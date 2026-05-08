@@ -7,8 +7,16 @@ using System.Text;
 
 namespace GCNet
 {
+    /// <summary>
+    /// Writes one JSON file per qualified change event. File name pattern:
+    /// <c>{yyyyMMdd_HHmmss_fff}_{sanitized-DN}.json</c>. Concurrent calls are serialised by
+    /// an internal lock so two threads never race on the unique-name counter and produce
+    /// torn or partially-written files.
+    /// </summary>
     internal sealed class EventFileWriter : IDisposable
     {
+        // Cap protects against pathological DNs blowing past Windows MAX_PATH (~260) once combined
+        // with timestamp prefix and output directory.
         private const int MaxFileStemLength = 180;
         private readonly object _sync = new object();
         private readonly string _outputDirectory;

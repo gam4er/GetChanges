@@ -24,6 +24,12 @@ namespace GCNet
         public IReadOnlyCollection<string> DnIgnoreFilters { get; set; }
         public bool UsePhantomRoot { get; set; }
         public Action OnNotificationReceived { get; set; }
+
+        /// <summary>
+        /// Invoked before each reconnect attempt (attempt &gt; 0) so the host can invalidate
+        /// the cached domain controller and force a fresh discovery on the next connection.
+        /// </summary>
+        public Action OnBeforeReconnect { get; set; }
     }
 
     internal sealed class LdapNotificationLoopService : ILdapNotificationLoopService
@@ -91,6 +97,10 @@ namespace GCNet
                 }
 
                 attempt++;
+                // Invalidate cached DC so the next ConnectionFactory() call rediscovers a healthy controller.
+                // Any exception in user-supplied callback is swallowed: reconnect must not be blocked.
+                try { context.OnBeforeReconnect?.Invoke(); }
+                catch (Exception cbEx) { AppConsole.WriteException(cbEx, "OnBeforeReconnect callback threw."); }
                 var delay = CalculateReconnectDelay(attempt);
                 AppConsole.Log("reconnect-attempt: waiting " + delay + " before creating new LDAP session");
                 try

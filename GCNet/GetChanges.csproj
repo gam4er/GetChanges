@@ -229,24 +229,25 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AppConsole.cs" />
-    <Compile Include="CanonicalValueHelper.cs" />
-    <Compile Include="ChangeModels.cs" />
-    <Compile Include="ChangeMonitorApplication.cs" />
-    <Compile Include="ChangeProcessingPipeline.cs" />
-    <Compile Include="DomainControllerSelector.cs" />
-    <Compile Include="EventFileWriter.cs" />
-    <Compile Include="LdapConnectionFactory.cs" />
-    <Compile Include="LdapEntryParser.cs" />
-    <Compile Include="LdapNotificationLoopService.cs" />
-    <Compile Include="LdapSchemaHelper.cs" />
-    <Compile Include="MetadataEnricher.cs" />
-    <Compile Include="MonitoringLifecycleService.cs" />
-    <Compile Include="ObjectKeyBuilder.cs" />
-    <Compile Include="Options.cs" />
-    <Compile Include="BaselineSnapshotLoader.cs" />
-    <Compile Include="GetChanges.cs" />
-    <Compile Include="PipelineMetrics.cs" />
+    <Compile Include="Hosting\AppConsole.cs" />
+    <Compile Include="Hosting\ChangeMonitorApplication.cs" />
+    <Compile Include="Hosting\GetChanges.cs" />
+    <Compile Include="Hosting\MonitoringLifecycleService.cs" />
+    <Compile Include="Hosting\Options.cs" />
+    <Compile Include="Ldap\DomainControllerSelector.cs" />
+    <Compile Include="Ldap\LdapConnectionFactory.cs" />
+    <Compile Include="Ldap\LdapEntryParser.cs" />
+    <Compile Include="Ldap\LdapNotificationLoopService.cs" />
+    <Compile Include="Ldap\LdapSchemaHelper.cs" />
+    <Compile Include="Ldap\MetadataEnricher.cs" />
+    <Compile Include="Models\BaselineEntry.cs" />
+    <Compile Include="Models\ChangeEvent.cs" />
+    <Compile Include="Output\EventFileWriter.cs" />
+    <Compile Include="Pipeline\BaselineSnapshotLoader.cs" />
+    <Compile Include="Pipeline\CanonicalValueHelper.cs" />
+    <Compile Include="Pipeline\ChangeProcessingPipeline.cs" />
+    <Compile Include="Pipeline\ObjectKeyBuilder.cs" />
+    <Compile Include="Pipeline\PipelineMetrics.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

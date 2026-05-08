@@ -1,236 +1,277 @@
-# GCNet
+# GetChanges (framework branch)
 
-GCNet — консольный инструмент для мониторинга изменений в Active Directory через LDAP-уведомления (`DirectoryNotificationControl`) с записью каждого события в отдельный JSON-файл, совместимый с дальнейшей аналитикой (в т.ч. в стиле BloodHound-пайплайнов).
+GetChanges is a Windows console tool that watches Active Directory for object changes via an LDAP **persistent search** and writes one indented JSON file per qualified change to a local output directory. This `framework` branch targets **.NET Framework 4.8** for environments that cannot run .NET 10 (the modern variant lives on `devel`).
 
-Этот README описывает **только основной проект `GCNet`**.
-
----
-
-## Что делает GCNet
-
-GCNet подключается к домену от имени текущего пользователя, подписывается на поток изменений в заданном Base DN и пишет события в файл.
-
-Ключевые возможности:
-
-- непрерывный мониторинг изменений AD-объектов в subtree;
-- запись «сырых» изменений в JSON;
-- выборочная фильтрация по отслеживаемым атрибутам;
-- расчёт `old/new` для отслеживаемых атрибутов через baseline-снимок;
-- опциональное обогащение события метаданными репликации (`msDS-ReplAttributeMetaData`).
+> All deep links in this document point at the `framework` branch on GitHub. If line numbers shift, update the links alongside the code (see [AGENTS.md](AGENTS.md)).
 
 ---
 
-## Принцип работы (по шагам)
+## 1. What it does — at a glance
 
-### 1) Старт и разбор параметров
-
-Точка входа — `GCNet/GCNet.cs`.
-CLI-параметры описаны в `GCNet/Options.cs` через `CommandLineParser`.
-
-### 2) LDAP-подключение
-
-`LDAPSearches.InitializeConnection()`:
-
-- определяет текущий AD-домен через `IPGlobalProperties.GetIPGlobalProperties().DomainName`;
-- создаёт `LdapConnection`;
-- включает:
-  - `ProtocolVersion = 3`,
-  - `AuthType = Negotiate`,
-  - `AutoReconnect = true`,
-  - `ReferralChasing = None`,
-  - `AutoBind = true`,
-  - `LocatorFlag = KdcRequired | PdcRequired`;
-- выполняет `Bind()`.
-
-### 3) Выбор области мониторинга
-
-В `ChangeMonitorApplication.Run()`:
-
-- если передан `--base-dn`, используется он;
-- иначе берётся `defaultNamingContext` через `GetBaseDn()` (запрос к RootDSE).
-
-Важно: выбранный DN в обоих случаях — это **стартовая база LDAP-запроса** (`baseDn` в `SearchRequest`), от которой начинается подписка.
-
-### 4) Подготовка baseline (если включён список tracked-атрибутов)
-
-Если задан `--tracked-attributes`, приложение:
-
-- строит начальный снимок объектов (`LoadBaseline(...)`),
-- хранит snapshot в `ConcurrentDictionary<Guid, BaselineEntry>`.
-
-Это нужно, чтобы на лету понимать, изменился ли интересующий атрибут, и формировать пары `<attr>_old` / `<attr>_new`.
-
-### 5) Подписка на LDAP-уведомления об изменениях
-
-`StartNotification(...)` формирует `SearchRequest` с:
-
-- фильтром `(objectClass=*)`;
-- `SearchScope.Subtree`;
-- атрибутами `*` и `objectGUID`;
-- контролами:
-  - `DirectoryNotificationControl`,
-  - `DomainScopeControl`,
-  - `1.2.840.113556.1.4.417` (show deleted),
-  - `1.2.840.113556.1.4.2064` (show recycled),
-  - `SearchOptionsControl(SearchOption.PhantomRoot)` **только при `--phantom-root`**.
-
-Пояснение по `SearchOption.PhantomRoot`:
-
-- включает режим виртуального корня (PhantomRoot) на подключённом DC;
-- фактический охват поиска может выходить за пределы одного naming context (NC);
-- это **не** гарантия «всех контекстов всего леса на всех DC»;
-- итоговый набор событий зависит от того, к какому DC вы подключены, и от прав учётной записи.
-
-Далее запускается `BeginSendRequest(... ReturnPartialResultsAndNotifyCallback ...)`, и каждый `SearchResultEntry` поступает в очередь обработки.
-
-### 6) Конвейер обработки событий
-
-`ChangeProcessingPipeline`:
-
-- вход: `BlockingCollection<ChangeEvent>`;
-- выход: `BlockingCollection<Dictionary<string, object>>`.
-
-Логика:
-
-1. Проверка, нужно ли писать событие:
-   - если tracked-атрибуты не заданы — пишется всё;
-   - если заданы — событие пишется только при изменении хотя бы одного tracked-атрибута.
-2. Для tracked-режима всегда добавляются поля `<attr>_old` / `<attr>_new`.
-3. Если включён `--enrich-metadata`, добавляется `msdsReplAttributeMetaData`.
-4. Событие передаётся в writer-очередь.
-
-### 7) Запись результата
-
-`EventFileWriter`:
-
-- как только событие попадает в очередь на запись, сразу пишет его на диск в отдельный JSON-файл;
-- имя файла формируется как `timestamp + "_" + DN`, с очисткой символов, недопустимых в именах файлов;
-- файлы создаются в каталоге `--output-dir` (по умолчанию `.\output`; путь может быть абсолютным или относительным, например `.\folder`).
+1. Discovers (or accepts) the best Domain Controller, binds an authenticated `LdapConnection`, and caches the selected DC for the lifetime of the process.
+2. Optionally pre-loads a **baseline snapshot** of the tracked attributes for every object under the search base — used to suppress notifications that don't actually change a tracked attribute.
+3. Issues a single LDAP persistent search (`DirectoryNotificationControl`) and asynchronously consumes incremental change entries.
+4. Filters out DNs matching ignore patterns; for the rest, parses the entry into a property bag.
+5. Pushes events through a small in-process **producer/consumer pipeline** (two unbounded `BlockingCollection<>` queues).
+6. Optionally enriches events with `msDS-ReplAttributeMetaData` from the DC.
+7. Writes each qualifying event as a standalone, timestamped JSON file via a single-writer file sink.
+8. Updates a live Spectre.Console status line with notification and write counters; reconnects with capped exponential backoff + jitter on transient LDAP failures and forces DC rediscovery on each reconnect.
 
 ---
 
-## Ключевые параметры запуска
+## 2. Quick start
 
-`GCNet/Options.cs`:
+```powershell
+# VS 2022 Developer PowerShell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\Launch-VsDevShell.ps1' -SkipAutomaticLocation
 
-- `--base-dn` — корневой DN для поиска (если не указан, берётся `defaultNamingContext`)
-- `--enrich-metadata` — включить обогащение `msDS-ReplAttributeMetaData`
-- `--tracked-attributes` — список атрибутов через запятую; включает режим фильтрации/диффа
-- `--dn-ignore-list` — путь к файлу с DN-фильтрами для игнорирования (по умолчанию `dn-ignore-default.txt`, см. `DefaultDnIgnoreListPath`)
-- `--output-dir` — каталог для JSON-файлов с событиями (абсолютный или относительный путь; по умолчанию `.\output`, см. `DefaultOutputDirectoryPath`)
-- `--phantom-root` — добавить `SearchOptionsControl(SearchOption.PhantomRoot)` в notification search
-- `--dc` — явный FQDN контроллера домена для LDAP-подключения
-- `--dc-selection` — режим выбора DC:
-  - `auto` (по умолчанию) — автоматический выбор здорового DC; если одновременно задан `--dc`, он используется как fallback;
-  - `manual` — принудительно использовать `--dc`; при `--dc-selection=manual` параметр `--dc` обязателен.
-- `--prefer-site-local` — при `--dc-selection=auto` предпочитать здоровые DC из локального AD-сайта (по умолчанию `true`)
+# Restore packages.config (msbuild restore does NOT cover packages.config projects)
+Invoke-WebRequest https://dist.nuget.org/win-x86-commandline/latest/nuget.exe `
+  -OutFile "$env:USERPROFILE\.nuget\nuget.exe"
+& "$env:USERPROFILE\.nuget\nuget.exe" restore GetChanges.sln
 
-Поведение по умолчанию:
+# Build
+msbuild GetChanges.sln /p:Configuration=Release /v:minimal
 
-- `--dn-ignore-list` по умолчанию указывает на `dn-ignore-default.txt` (`DefaultDnIgnoreListPath`). Если файла нет, он создаётся автоматически с шаблонным комментарием.
-- `--output-dir` по умолчанию указывает на `.\output` (`DefaultOutputDirectoryPath`). Каталог создаётся автоматически, если отсутствует.
-- `--dc-selection` по умолчанию `auto`; `manual` требует обязательный `--dc`.
-- `--prefer-site-local` по умолчанию включён (`true`) и влияет на ранжирование кандидатов DC в `auto`-режиме.
-
-Пример:
-
-```bash
-GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,adminCount,userAccountControl" --enrich-metadata
+# Run
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local"
+GCNet\bin\Release\GCNet.exe --help
 ```
 
-Дополнительные примеры:
+Press **ENTER** or **CTRL+C** to stop the monitor cleanly (cooperative cancellation, then bounded waits — see [`MonitoringLifecycleService`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L24)).
 
-```bash
-# manual DC selection (обязателен --dc)
-GCNet.exe --dc-selection manual --dc dc01.corp.local --base-dn "DC=corp,DC=local"
+---
 
-# auto mode с fallback на --dc
-GCNet.exe --dc-selection auto --dc dc-fallback.corp.local --prefer-site-local --phantom-root
+## 3. Requirements
+
+- Windows with .NET Framework 4.8 runtime present.
+- Visual Studio 2022 + MSBuild 17.x (Build Tools edition is fine).
+- Domain-joined account with permission to read directory data and (if `--enrich-metadata`) `msDS-ReplAttributeMetaData`.
+- Outbound LDAP/LDAPS reachability to at least one DC.
+
+---
+
+## 4. CLI reference
+
+All options are defined in [`Hosting/Options.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/Options.cs#L8):
+
+| Option | Description |
+| --- | --- |
+| `--base-dn <DN>` | Search root. Defaults to `defaultNamingContext`. |
+| `--enrich-metadata` | Attach `msDS-ReplAttributeMetaData` to each event. |
+| `--tracked-attributes a,b,c` | Comma-separated attribute list. When set, only changes affecting these attributes produce a file; baseline snapshot is loaded at startup. |
+| `--dn-ignore-list <path>` | File with substring DN filters (one per line). Default: `dn-ignore-default.txt`. |
+| `--output-dir <path>` | Directory for JSON event files. Default: `.\output`. |
+| `--phantom-root` | Enable LDAP `SearchOption.PhantomRoot` for the persistent search. |
+| `--dc <fqdn>` | Force a specific DC (combine with `--dc-selection manual`). |
+| `--dc-selection auto\|manual` | DC selection strategy. Default: `auto`. |
+| `--prefer-site-local` | Prefer healthy DCs in the local AD site. Default: `true`. |
+
+---
+
+## 5. Architecture
+
+```
+                +--------------------------+
+                |  GetChanges.Main         |  Hosting/GetChanges.cs
+                |  (Spectre.Console.Cli)   |
+                +-----------+--------------+
+                            |
+                            v
+                +--------------------------+
+                |  ChangeMonitorApplication|  Hosting/ChangeMonitorApplication.cs
+                |  - validates options     |
+                |  - wires subsystems      |
+                |  - owns lifecycle/status |
+                +---+-----------+----------+
+                    |           |
+       +------------+           +-------------------+
+       v                                            v
++-------------------+                    +-------------------------+
+| LdapConnection    |                    | BaselineSnapshotLoader  |  Pipeline/BaselineSnapshotLoader.cs
+| Factory           |                    | (optional, when         |
+| Ldap/             |                    | --tracked-attributes)   |
+| LdapConnection    |                    +-------------------------+
+| Factory.cs        |
++---------+---------+
+          |
+          v                                         (ChangeEvent)
++-------------------+    incoming queue    +-------------------------+    outgoing queue    +------------------+
+| LdapNotification  |--------------------->| ChangeProcessing        |--------------------->| EventFileWriter  |
+| LoopService       |  BlockingCollection  | Pipeline                |  BlockingCollection  | Output/          |
+| Ldap/...          |                      | Pipeline/...            |                      | EventFileWriter  |
++---------+---------+                      +-------------------------+                      +------------------+
+          |                                            |
+          | OnNotificationReceived()                   | (filters by tracked-attribute diff,
+          | OnBeforeReconnect() ------> resets DC      |  emits {attr}_old / {attr}_new pairs,
+          |                              cache         |  optional MetadataEnricher)
+          v                                            v
+   counters / status line                       counters / status line
 ```
 
----
+Key cross-cutting facts:
 
-## Формат событий (концептуально)
-
-События представляют собой объект `Dictionary<string, object>`, полученный из `SearchResultEntry`.
-В зависимости от режима вы увидите:
-
-- базовые LDAP-атрибуты объекта;
-- при tracked-режиме:
-  - `<attribute>_old`
-  - `<attribute>_new`
-- при metadata-режиме:
-  - `msdsReplAttributeMetaData` (массив словарей с полями вроде `attributeName`, `version`, `lastChangeTime`, `changedBy`, `raw`).
+- **Single namespace** `GCNet`, folders express grouping only — minimises `using` churn.
+- Two **unbounded** in-process queues (`incoming`, `outgoing`) decouple the LDAP callback from disk I/O. See note in [`ChangeProcessingPipeline`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L23).
+- The notification loop is the only component that reconnects; on each reconnect it invokes `OnBeforeReconnect`, which clears the cached DC name in the connection factory so a fresh DC is picked next attempt.
 
 ---
 
-## Важные принципы и ограничения
+## 6. Subsystems
 
-1. **GCNet — near-real-time монитор**, а не форензик-хранилище:
-   качество потока зависит от доступности DC, прав и стабильности LDAP-сеанса.
+### 6.1 Entry point and CLI ([`Hosting/GetChanges.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/GetChanges.cs#L9))
 
-2. **Tracked-режим завязан на baseline в памяти**:
-   после рестарта baseline пересобирается заново.
+- `Main` runs a Spectre.Console.Cli `CommandApp<RunCommand>`.
+- `RunCommand.Execute` wraps the application in `AnsiConsole.Status(...)` so the orchestrator can update a live status line, then delegates to [`ChangeMonitorApplication.Run`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L41).
+- Top-level exceptions are caught and logged via [`AppConsole.WriteException`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/AppConsole.cs#L19).
 
-3. **Case-insensitive сопоставление атрибутов**:
-   pipeline пытается корректно сопоставлять ключи атрибутов вне зависимости от регистра.
+### 6.2 Application orchestrator ([`Hosting/ChangeMonitorApplication.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L13))
 
-4. **Сериализация значений в canonical JSON**:
-   сравнение изменений выполняется через JSON-представление значения.
+- Holds the `_baseline` `ConcurrentDictionary` and counters (`_notificationCount`, `_eventsWrittenCount`).
+- Wires: connection factory → baseline loader → pipeline → writer → notification loop, with [`MonitoringLifecycleService`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L16) supplying the cancellation token.
+- `BuildNotificationLoopContext` registers `OnBeforeReconnect = _connectionFactory.ResetCachedDomainController` so each reconnect attempt forces fresh DC selection — see [line 88](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L88).
+- Status line is rebuilt on every notification and every successful file write — see [`UpdateStatus`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L172). Counters are read with `Interlocked.Read` for a torn-write-free view.
 
-5. **Завершение по ENTER**:
-   приложение работает до ручной остановки (нажатие ENTER в консоли).
+### 6.3 Process lifecycle ([`Hosting/MonitoringLifecycleService.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L16))
+
+- Creates a `CancellationTokenSource` plus a `ManualResetEventSlim` stop signal.
+- `WaitForStopSignal` listens for `ENTER` and `CTRL+C` simultaneously, so either path terminates the program cleanly.
+- `WaitForTask`/`WaitForTasks` give the orchestrator bounded shutdown timeouts so a stuck LDAP callback cannot hang process exit forever.
+
+### 6.4 Best-DC auto-discovery ([`Ldap/DomainControllerSelector.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/DomainControllerSelector.cs#L20))
+
+- `SelectBestDomainController(options, out reason)` honours `--dc` / `--dc-selection manual` first, otherwise enumerates DCs via `System.DirectoryServices.ActiveDirectory`, prefers the local AD site when `--prefer-site-local` is set, and probes candidates for health.
+- The chosen DC and the human-readable selection reason are logged once.
+
+### 6.5 Connection factory and DC cache ([`Ldap/LdapConnectionFactory.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapConnectionFactory.cs#L22))
+
+- Caches the selected DC under `_cacheLock` so DC discovery runs **once** at startup (and again only on reconnect).
+- [`ResetCachedDomainController`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapConnectionFactory.cs#L36) is invoked from the notification loop's `OnBeforeReconnect` callback to drop the cache; the next [`CreateBoundConnection`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapConnectionFactory.cs#L50) call rediscovers.
+- Configures protocol v3, `AutoReconnect`, no referral chasing, best-effort TCP keep-alive, and `AuthType.Negotiate` with `AutoBind`.
+- **SECURITY NOTE:** server certificate validation is disabled — see the warning at [line 85](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapConnectionFactory.cs#L85).
+
+### 6.6 Persistent-search notification loop ([`Ldap/LdapNotificationLoopService.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapNotificationLoopService.cs#L46))
+
+- Runs `RunAsync(NotificationLoopContext, CancellationToken)`. Each attempt opens an `LdapConnection`, attaches `DirectoryNotificationControl` (and optionally `SearchOptionsControl(PhantomRoot)`), and starts a `BeginSendRequest` callback that delivers partial results to `OnPartialResults` (line 186).
+- DN ignore filtering (`ShouldIgnoreByDn`, line 254) drops unwanted entries before parsing.
+- Each forwarded entry is parsed by [`LdapEntryParser`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapEntryParser.cs) and pushed to the pipeline's incoming queue; `OnNotificationReceived` is fired for the status counter.
+- On `IsRecoverableNotificationException` (line 272) the loop:
+  1. Increments the attempt counter.
+  2. Invokes `OnBeforeReconnect` (clears DC cache).
+  3. Sleeps `CalculateReconnectDelay(attempt)` — exponential growth capped at 60s with jitter, using a process-wide `Random` guarded by a lock (no `Random.Shared` on .NET Framework 4.8).
+
+### 6.7 Entry parsing ([`Ldap/LdapEntryParser.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapEntryParser.cs))
+
+- Converts a `SearchResultEntry` into a `Dictionary<string, object>` plus an `objectGUID`.
+- Decodes binary AD attributes (SID, GUID, file-time, security descriptors) into shapes friendly to JSON / SharpHound conventions.
+
+### 6.8 Baseline snapshot ([`Pipeline/BaselineSnapshotLoader.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/BaselineSnapshotLoader.cs#L21))
+
+- Triggered only when `--tracked-attributes` is supplied.
+- Walks the search base with paged search and, for every object, captures canonical JSON values of the tracked attributes via [`CanonicalValueHelper`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/CanonicalValueHelper.cs#L7).
+- Stores results in the shared `ConcurrentDictionary<string, BaselineEntry>` keyed by [`ObjectKeyBuilder.BuildObjectKey`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ObjectKeyBuilder.cs#L9) (objectGUID when available, otherwise SHA hash of DN).
+
+### 6.9 Pipeline and queues ([`Pipeline/ChangeProcessingPipeline.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L23))
+
+- Two `BlockingCollection<T>` instances over `ConcurrentQueue<T>`:
+  - `Incoming` — populated by the LDAP callback thread.
+  - `Outgoing` — drained by the writer task in the orchestrator.
+- [`StartAsync`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L47) consumes `Incoming`. For each event:
+  1. If `--tracked-attributes` is set, [`ShouldWriteWhenTrackedAttributesChanged`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L80) compares canonical JSON of each tracked attribute against the baseline; updates baseline; emits `{attr}_old` / `{attr}_new` pairs only on real change.
+  2. If `--enrich-metadata` is set, calls `MetadataEnricher.TryLoadMetadata`.
+  3. Adds the resulting property bag to `Outgoing`.
+
+### 6.10 Metadata enrichment ([`Ldap/MetadataEnricher.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/MetadataEnricher.cs#L20))
+
+- Lazily holds a private `LdapConnection` (the user's connection is reserved for the persistent search).
+- Reads `msDS-ReplAttributeMetaData` for the changed object and parses each XML record.
+- Resets and reopens the helper connection on errors so transient failures don't poison subsequent calls.
+
+### 6.11 Output writer / file sink ([`Output/EventFileWriter.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Output/EventFileWriter.cs#L16))
+
+- One JSON file per qualifying event, named `{yyyyMMdd_HHmmss_fff}_{sanitized-DN}.json`.
+- Internal lock serialises `WriteEvent` so the unique-name counter never races and produces partially-written files.
+- Stems are capped at 180 characters to stay within Windows path limits.
+- After every successful write the orchestrator's [`OnFileWritten`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L166) increments the writer counter and refreshes the status line.
+
+### 6.12 Console / status ([`Hosting/AppConsole.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/AppConsole.cs#L6))
+
+- All log output goes through `AppConsole.Log` and `AppConsole.WriteException` so the Spectre.Console status spinner is not torn by ad-hoc `Console.WriteLine` calls.
+- Status format (in `UpdateStatus`): `[grey]{timestamp}[/] notifications: [yellow]{n}[/]  written: [green]{m}[/]`.
+
+### 6.13 Pipeline metrics ([`Pipeline/PipelineMetrics.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/PipelineMetrics.cs#L5))
+
+- Lightweight in-memory counters: queued/processed events, written events, metadata errors, writer errors, processing errors. Logged periodically via `MaybeLogSnapshot`.
 
 ---
 
-## Требования к среде
+## 7. Data structures
 
-- Windows/AD-среда с доступом к LDAP домена;
-- .NET Framework 4.8 (см. `GCNet.csproj`);
-- учётная запись с правами на чтение нужной области каталога и атрибутов;
-- сетевой доступ к контроллерам домена.
-
----
-
-## Сборка
-
-Проект: `GCNet/GCNet.csproj`.
-Решение: `GetChanges.sln`.
-
-Типовой сценарий:
-
-1. восстановить NuGet-пакеты;
-2. собрать `Release` конфигурацию;
-3. запустить `GCNet.exe` с нужными флагами.
+| Type | File | Purpose |
+| --- | --- | --- |
+| `Options` | [`Hosting/Options.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/Options.cs#L8) | Parsed CLI options (Spectre.Console.Cli `CommandSettings`). |
+| `ChangeEvent` | [`Models/ChangeEvent.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Models/ChangeEvent.cs#L12) | Raw entry + parsed property bag travelling through the pipeline. |
+| `BaselineEntry` | [`Models/BaselineEntry.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Models/BaselineEntry.cs#L10) | Per-object canonical JSON of tracked attributes. |
+| `NotificationLoopContext` | [`Ldap/LdapNotificationLoopService.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapNotificationLoopService.cs) | Bag of inputs for one notification-loop run (base DN, factory, target queue, ignore filters, callbacks). |
+| `MetadataEnrichmentResult` | [`Ldap/MetadataEnricher.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/MetadataEnricher.cs#L13) | Parsed `msDS-ReplAttributeMetaData` entries. |
+| `BlockingCollection<ChangeEvent>` (incoming) and `BlockingCollection<Dictionary<string,object>>` (outgoing) | [`Pipeline/ChangeProcessingPipeline.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L25) | The two queues bridging notification, processing, and writing. |
+| `ConcurrentDictionary<string, BaselineEntry>` | [`Hosting/ChangeMonitorApplication.cs`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L15) | Shared baseline state, keyed by `ObjectKeyBuilder.BuildObjectKey`. |
 
 ---
 
-## Модули проекта GCNet
+## 8. End-to-end algorithm
 
-- `GCNet.cs` — entrypoint и запуск приложения;
-- `Options.cs` — CLI-опции;
-- `ChangeMonitorApplication.cs` — orchestration жизненного цикла (connect → monitor → stop);
-- `ChangeProcessingPipeline.cs` — фильтрация, diff tracked-атрибутов, enrichment, маршрутизация в writer-очередь;
-- `MetadataEnricher.cs` — загрузка и парсинг `msDS-ReplAttributeMetaData`;
-- `LDAPSearches.cs` — LDAP utility-методы и инициализация подключения;
-- `EventFileWriter` (в `GCNet/EventFileWriter.cs`) — запись каждого события в отдельный JSON-файл;
-- `ChangeModels.cs` — модели `ChangeEvent`, `BaselineEntry`.
+1. **CLI parsing.** `Main` ([Hosting/GetChanges.cs:11](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/GetChanges.cs#L11)) hands control to Spectre.Console.Cli, which materialises `Options` and invokes `RunCommand.Execute`.
+2. **Status spinner.** `RunCommand.Execute` ([Hosting/GetChanges.cs:20](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/GetChanges.cs#L20)) starts `AnsiConsole.Status` and calls `ChangeMonitorApplication.Run`.
+3. **Validate options.** `ValidateDomainControllerOptions` ([Hosting/ChangeMonitorApplication.cs:126](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L126)) rejects inconsistent `--dc-selection`/`--dc` combinations.
+4. **DC discovery + bind.** `LdapConnectionFactory.CreateBoundConnection` ([Ldap/LdapConnectionFactory.cs:50](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapConnectionFactory.cs#L50)) selects the best DC via `DomainControllerSelector` ([Ldap/DomainControllerSelector.cs:28](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/DomainControllerSelector.cs#L28)) and caches the DC name under a lock.
+5. **Resolve base DN.** When omitted, `GetBaseDn` ([Hosting/ChangeMonitorApplication.cs:203](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L203)) reads `defaultNamingContext` from RootDSE.
+6. **Load DN ignore list.** Substring filters parsed from `--dn-ignore-list`.
+7. **Parse tracked-attributes.** Empty list → "write everything"; non-empty → snapshot loading is required.
+8. **Baseline snapshot (optional).** `BaselineSnapshotLoader.LoadInitialSnapshot` ([Pipeline/BaselineSnapshotLoader.cs:30](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/BaselineSnapshotLoader.cs#L30)) page-walks the search base and populates the baseline dictionary.
+9. **Build pipeline + writer.** `ChangeProcessingPipeline` and `EventFileWriter` are instantiated; the writer uses `--output-dir` (default `.\output`).
+10. **Spawn workers.** `pipeline.StartAsync` and `StartWriterLoop` ([Hosting/ChangeMonitorApplication.cs:108](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L108)) run on the thread pool.
+11. **Start notification loop.** `LdapNotificationLoopService.RunAsync` ([Ldap/LdapNotificationLoopService.cs:46](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapNotificationLoopService.cs#L46)) issues the persistent search.
+12. **Per-notification flow.** Inside `OnPartialResults` ([Ldap/LdapNotificationLoopService.cs:186](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapNotificationLoopService.cs#L186)): apply DN filter → parse via `LdapEntryParser` → enqueue `ChangeEvent` to `Incoming` → fire `OnNotificationReceived` (counter + status refresh).
+13. **Pipeline filtering.** `ShouldWriteWhenTrackedAttributesChanged` ([Pipeline/ChangeProcessingPipeline.cs:80](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Pipeline/ChangeProcessingPipeline.cs#L80)) compares canonical JSON of each tracked attribute against the baseline. On real change emits `_old` / `_new` pairs and updates baseline atomically.
+14. **Metadata enrichment (optional).** `MetadataEnricher.TryLoadMetadata` adds `msdsReplAttributeMetaData` to the property bag.
+15. **Forward to writer queue.** Property bag is added to `Outgoing`.
+16. **Write JSON file.** `EventFileWriter.WriteEvent` ([Output/EventFileWriter.cs:29](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Output/EventFileWriter.cs#L29)) builds a unique path and serialises with `Newtonsoft.Json` (indented, UTF-8 no BOM).
+17. **Update writer counter.** `OnFileWritten` ([Hosting/ChangeMonitorApplication.cs:166](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/ChangeMonitorApplication.cs#L166)) increments `_eventsWrittenCount` and refreshes the status line.
+18. **Reconnect on transient errors.** When `IsRecoverableNotificationException` ([Ldap/LdapNotificationLoopService.cs:272](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Ldap/LdapNotificationLoopService.cs#L272)) returns true, the loop fires `OnBeforeReconnect` (resets the cached DC), sleeps `CalculateReconnectDelay(attempt)` (capped at 60s with jitter), and retries.
+19. **Stop signal.** `MonitoringLifecycleService.WaitForStopSignal` ([Hosting/MonitoringLifecycleService.cs:24](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L24)) unblocks on ENTER or CTRL+C.
+20. **Cooperative shutdown.** `RequestStop` cancels the token; the orchestrator waits up to 5s for the notification loop, then completes the `Incoming` queue, then waits up to 5s for the worker and writer tasks. Bounded waits guarantee process exit.
 
 ---
 
-## Безопасность и эксплуатационные замечания
+## 9. Build, run, publish
 
-- Приложение пишет потенциально чувствительные атрибуты AD в файлы — храните output как чувствительные данные.
-- В `InitializeConnection()` отключена проверка серверного сертификата (`VerifyServerCertificate => false`) — учитывайте это в защищённых контурах и при аудитах.
-- При мониторинге больших областей DN поток событий может быть высоким; закладывайте место на диске и контролируйте ротацию файлов на стороне эксплуатации.
+- **Restore:** `& "$env:USERPROFILE\.nuget\nuget.exe" restore GetChanges.sln`
+- **Build (Release):** `msbuild GetChanges.sln /p:Configuration=Release /v:minimal`
+- **Output:** `GCNet\bin\Release\GCNet.exe` (Costura.Fody embeds dependencies into the single executable; see `GCNet/FodyWeavers.xml`).
+- **Submodule:** `SharpHoundCommon/` is consumed via project reference at `net472`. Initialise with `git submodule update --init --recursive`.
 
 ---
 
-## Краткий сценарий использования
+## 10. Security notes
 
-1. Определите область (`--base-dn`).
-2. Решите, нужен ли full-stream или только tracked-изменения (`--tracked-attributes`).
-3. При необходимости включите метаданные (`--enrich-metadata`).
-4. Запустите и оставьте процесс работать.
-5. Для остановки нажмите ENTER.
-6. Передайте JSON в ваш аналитический пайплайн.
+- **Sensitive output.** JSON event files reproduce directory data verbatim (including ACEs, SIDs, attribute history). Treat the output directory as sensitive; rotate / scope access.
+- **Disabled certificate validation.** `LdapConnectionFactory` short-circuits `VerifyServerCertificate` to allow internal AD lab use. Replace with a real validator before any external deployment — see the inline `SECURITY` comment.
+- **Account privileges.** The bound principal can read everything the configured `--base-dn` allows; principle of least privilege applies.
+
+---
+
+## 11. Future work / ideas
+
+- Bound the in-process queues so a slow disk cannot grow process memory unbounded.
+- Parallelise DC health probes during `auto` selection.
+- Migrate logging from `AppConsole` to `Microsoft.Extensions.Logging`.
+- Surface pipeline metrics over `EventCounters` / ETW.
+- Optional per-attribute tombstone tracking.
+
+---
+
+## 12. Related documents
+
+- [AGENTS.md](AGENTS.md) — coding style, build commands, required-to-update files for this branch.
+- `SharpHoundCommon/README.md` — submodule overview and tests.

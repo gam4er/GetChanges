@@ -9,6 +9,17 @@ using System.Threading.Tasks;
 
 namespace GCNet
 {
+    /// <summary>
+    /// Producer-consumer pipeline that filters incoming change events against the baseline
+    /// snapshot, optionally enriches with replication metadata, and forwards the JSON-ready
+    /// dictionary to the writer queue.
+    /// </summary>
+    /// <remarks>
+    /// Two unbounded <see cref="BlockingCollection{T}"/> queues decouple the LDAP notification
+    /// thread (producer of <see cref="Incoming"/>) from the file writer (consumer of
+    /// <see cref="Outgoing"/>). "Unbounded" means a slow disk can grow memory; future work:
+    /// switch to a bounded capacity with backpressure.
+    /// </remarks>
     internal sealed class ChangeProcessingPipeline
     {
         private readonly BlockingCollection<ChangeEvent> _incoming = new BlockingCollection<ChangeEvent>(new ConcurrentQueue<ChangeEvent>());

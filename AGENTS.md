@@ -1,39 +1,81 @@
-# Repository Guidelines
+# Repository Guidelines (framework branch)
+
+## Branch Context
+
+- **Branch:** `framework` — long-lived parallel track of `devel`, kept on **.NET Framework 4.8** for environments that cannot run .NET 10.
+- For the modern .NET 10 variant work on the `devel` branch instead.
 
 ## Project Structure & Module Organization
 
 - `GetChanges.sln` is the solution entry point.
-- `GCNet/` is the primary console app (AD LDAP change monitor). Key sources live directly under `GCNet/` (for example `GCNet/GCNet.cs`, `GCNet/ChangeProcessingPipeline.cs`).
-- `SerializeToJSONLikeSharpHound/` contains a small helper tool for serialization experiments and compatibility.
-- `SharpHoundCommon/` is a Git submodule that provides shared libraries and has its own `src/` and `test/` trees.
-- `packages/` stores restored NuGet packages for classic `packages.config` projects.
+- `GCNet/` is the primary console app (AD LDAP change monitor). After the framework-branch refactor, sources are grouped by responsibility:
+  - `GCNet/Hosting/` — entry point, CLI options, top-level orchestrator and process lifecycle.
+  - `GCNet/Ldap/` — connection factory, DC discovery, persistent-search loop, entry parsing, schema/metadata helpers.
+  - `GCNet/Pipeline/` — baseline snapshot loader, change pipeline, canonical value comparison, pipeline metrics.
+  - `GCNet/Models/` — DTOs (`ChangeEvent`, `BaselineEntry`).
+  - `GCNet/Output/` — JSON event file writer.
+- `SerializeToJSONLikeSharpHound/` — small helper tool for serialization compatibility experiments.
+- `SharpHoundCommon/` — git submodule providing shared libraries (multi-target, `net472` consumed here).
+- `packages/` — restored NuGet packages for classic `packages.config` projects.
 
 ## Build, Test, and Development Commands
 
-- Restore NuGet packages: `nuget restore GetChanges.sln`
-- Build the solution (Release): `msbuild GetChanges.sln /p:Configuration=Release`
-- Run GCNet after build: `GCNet/bin/Release/GCNet.exe --base-dn "DC=corp,DC=local"`
-- This repo targets .NET Framework 4.8 (`GCNet/GCNet.csproj`). Build with Visual Studio or MSBuild from a VS Developer Prompt.
-- There is no top-level test runner in this repo; unit tests live in the `SharpHoundCommon` submodule.
+A **VS 2022 Developer PowerShell** (or Developer Command Prompt) is required so that `msbuild` is on PATH. From a regular shell run:
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\Launch-VsDevShell.ps1' -SkipAutomaticLocation
+```
+
+GCNet uses `packages.config`, which `msbuild /t:Restore` does **not** restore. Use `nuget.exe`:
+
+```powershell
+# one-time bootstrap if nuget.exe is missing
+Invoke-WebRequest https://dist.nuget.org/win-x86-commandline/latest/nuget.exe `
+  -OutFile "$env:USERPROFILE\.nuget\nuget.exe"
+
+# restore + build
+& "$env:USERPROFILE\.nuget\nuget.exe" restore GetChanges.sln
+msbuild GetChanges.sln /p:Configuration=Release /v:minimal
+```
+
+Run after build:
+
+```powershell
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local"
+GCNet\bin\Release\GCNet.exe --help
+```
+
+This branch targets **.NET Framework 4.8** (`GCNet/GetChanges.csproj` → `<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>`) and the `SharpHoundCommon` submodule is consumed as **net472**.
+
+There is no top-level test runner. Unit tests live under the `SharpHoundCommon` submodule.
 
 ## Coding Style & Naming Conventions
 
 - C# files use standard .NET conventions: `PascalCase` for types/methods, `camelCase` for locals and parameters.
-- Indentation follows the existing project defaults (4 spaces; no tabs).
-- Keep new files alongside related components in `GCNet/` unless they belong to the submodule.
+- Indentation: 4 spaces, no tabs (matches existing files).
+- Keep `namespace GCNet` flat — folders express grouping, not nested namespaces. This minimises `using` churn when files move.
+- New files must be registered explicitly in `GCNet/GetChanges.csproj` under the `<Compile Include="...">` item group with the correct subfolder path.
+- Stay compatible with C# language features available on .NET Framework 4.8 / VS 2022 — avoid `Random.Shared`, file-scoped namespaces, raw string literals, and other newer-runtime-only APIs.
 
 ## Testing Guidelines
 
 - No first-party tests are defined at the root solution level.
 - If you modify `SharpHoundCommon/`, run its tests from that submodule (see `SharpHoundCommon/README.md`).
 
+## Required-to-update Files
+
+When making non-trivial changes to GCNet, update the following alongside the code:
+
+- `AGENTS.md` (this file) — keep build/run instructions accurate.
+- `README.md` — update architecture description and deep links if file paths or line numbers shift materially.
+
 ## Commit & Pull Request Guidelines
 
-- Commit messages follow an imperative style; short scopes like `docs:` appear in history (examples: `docs: ...`, `Refactor ...`, `Fixes`).
-- PRs typically include a concise summary and the test status (or a note when tests are not run).
-- If a change touches the submodule, call it out explicitly in the PR description.
+- Commit messages follow an imperative style; short scopes appear in history (examples: `docs: ...`, `Refactor ...`, `Fixes`).
+- PRs typically include a concise summary and the test/build status.
+- If a change touches the submodule, call it out explicitly in the PR description and ensure the submodule SHA is committed.
 
 ## Security & Configuration Tips
 
-- GCNet writes potentially sensitive directory data to per-event JSON files. Treat output files as sensitive artifacts.
-- LDAP connections in `GCNet/LDAPSearches.cs` intentionally disable certificate validation; review this if you need stricter security postures.
+- GCNet writes potentially sensitive directory data to per-event JSON files. Treat output files as sensitive artifacts and rotate / scope access accordingly.
+- LDAP connections in `GCNet/Ldap/LdapConnectionFactory.cs` intentionally disable certificate validation (`VerifyServerCertificate => false`) for typical AD lab/internal deployments. Review and replace with proper validation for production / external deployments.
