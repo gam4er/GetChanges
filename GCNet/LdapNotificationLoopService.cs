@@ -24,13 +24,17 @@ namespace GCNet
         public IReadOnlyCollection<string> DnIgnoreFilters { get; set; }
         public bool UsePhantomRoot { get; set; }
         public Action OnNotificationReceived { get; set; }
+
+        /// <summary>
+        /// Invoked before each reconnect attempt (attempt > 0) to allow the factory to
+        /// invalidate its cached domain controller and force rediscovery.
+        /// </summary>
+        public Action OnBeforeReconnect { get; set; }
     }
 
     internal sealed class LdapNotificationLoopService : ILdapNotificationLoopService
     {
         private readonly ILdapEntryParser _entryParser;
-        private static readonly object BackoffRandomLock = new object();
-        private static readonly Random BackoffRandom = new Random();
 
         public LdapNotificationLoopService(ILdapEntryParser entryParser)
         {
@@ -93,6 +97,7 @@ namespace GCNet
                 attempt++;
                 var delay = CalculateReconnectDelay(attempt);
                 AppConsole.Log("reconnect-attempt: waiting " + delay + " before creating new LDAP session");
+                context.OnBeforeReconnect?.Invoke();
                 try
                 {
                     Task.Delay(delay, cancellationToken).Wait(cancellationToken);
@@ -274,13 +279,8 @@ namespace GCNet
         {
             var cappedAttempt = Math.Min(attempt, 6);
             var baseDelaySeconds = Math.Pow(2, Math.Max(0, cappedAttempt - 1));
-            double jitter;
-            lock (BackoffRandomLock)
-            {
-                jitter = BackoffRandom.NextDouble() * 0.2;
-            }
-
-            return TimeSpan.FromSeconds(Math.Min(60, baseDelaySeconds * (1.0 + jitter)));
+            var jitter = Random.Shared.NextDouble() * 0.2;
+            return TimeSpan.FromSeconds(baseDelaySeconds * (1 + jitter));
         }
 
         private static void WaitForRestartOrCancellation(Task restartTask, CancellationToken cancellationToken)

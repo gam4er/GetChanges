@@ -6,29 +6,59 @@ namespace GCNet
     internal interface ILdapConnectionFactory
     {
         LdapConnection CreateBoundConnection(Options options);
+
+        /// <summary>
+        /// Invalidates the cached domain controller so the next CreateBoundConnection call
+        /// triggers a full rediscovery. Called by the notification loop before each reconnect attempt.
+        /// </summary>
+        void ResetCachedDomainController();
     }
 
     internal sealed class LdapConnectionFactory : ILdapConnectionFactory
     {
         private readonly IDomainControllerSelector _domainControllerSelector;
+        private readonly object _cacheLock = new object();
+        private string _cachedDomainController;
 
         public LdapConnectionFactory(IDomainControllerSelector domainControllerSelector)
         {
             _domainControllerSelector = domainControllerSelector;
         }
 
+        /// <inheritdoc/>
+        public void ResetCachedDomainController()
+        {
+            lock (_cacheLock)
+            {
+                AppConsole.Log("dc-cache-reset: domain controller cache cleared, next connection will rediscover.");
+                _cachedDomainController = null;
+            }
+        }
+
         public LdapConnection CreateBoundConnection(Options options)
         {
-            var selectedDc = _domainControllerSelector.SelectBestDomainController(options, out var selectionReason);
-            if (string.IsNullOrWhiteSpace(selectedDc))
+            string selectedDc;
+            lock (_cacheLock)
             {
-                throw new InvalidOperationException("Unable to select domain controller for LDAP connection.");
+                if (_cachedDomainController == null)
+                {
+                    _cachedDomainController = _domainControllerSelector.SelectBestDomainController(options, out var selectionReason);
+                    if (string.IsNullOrWhiteSpace(_cachedDomainController))
+                    {
+                        throw new InvalidOperationException("Unable to select domain controller for LDAP connection.");
+                    }
+
+                    AppConsole.Log("dc-selected: " + _cachedDomainController + " (reason: " + selectionReason + ")");
+                }
+                else
+                {
+                    AppConsole.Log("dc-using-cached: " + _cachedDomainController);
+                }
+
+                selectedDc = _cachedDomainController;
             }
 
-            AppConsole.Log("dc-selected: " + selectedDc + " (reason: " + selectionReason + ")");
-
-            var identifier = new LdapDirectoryIdentifier(selectedDc);
-            var connection = new LdapConnection(identifier)
+            var connection = new LdapConnection(selectedDc)
             {
                 Timeout = TimeSpan.FromHours(1),
                 AuthType = AuthType.Negotiate,

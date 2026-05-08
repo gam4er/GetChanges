@@ -4,23 +4,37 @@
 
 - `GetChanges.sln` is the solution entry point.
 - `GCNet/` is the primary console app (AD LDAP change monitor). Key sources live directly under `GCNet/` (for example `GCNet/GCNet.cs`, `GCNet/ChangeProcessingPipeline.cs`).
-- `SerializeToJSONLikeSharpHound/` contains a small helper tool for serialization experiments and compatibility.
-- `SharpHoundCommon/` is a Git submodule that provides shared libraries and has its own `src/` and `test/` trees.
-- `packages/` stores restored NuGet packages for classic `packages.config` projects.
+- `SharpHoundCommon/` is a Git submodule that provides shared libraries and has its own `src/` and `test/` trees. Current HEAD: `28512735`.
+- The `packages/` directory is a leftover from the old `packages.config` era and is no longer used by the SDK-style project.
 
 ## Build, Test, and Development Commands
 
-- Restore NuGet packages: `nuget restore GetChanges.sln`
-- Build the solution (Release): `msbuild GetChanges.sln /p:Configuration=Release`
-- Run GCNet after build: `GCNet/bin/Release/GCNet.exe --base-dn "DC=corp,DC=local"`
-- This repo targets .NET Framework 4.8 (`GCNet/GCNet.csproj`). Build with Visual Studio or MSBuild from a VS Developer Prompt.
+- Build (Debug): `dotnet build GetChanges.sln -c Debug`
+- Build (Release): `dotnet build GetChanges.sln -c Release`
+- Publish single-file self-contained executable (replaces Costura.Fody):
+  ```
+  dotnet publish GCNet/GetChanges.csproj -c Release -r win-x64 \
+    /p:SelfContained=true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+  ```
+- Run after build: `GCNet/bin/Debug/net10.0-windows/GCNet.exe --tracked-attributes userAccountControl,pwdLastSet,badPasswordTime,mail`
+- This repo targets **net10.0-windows** (`GCNet/GetChanges.csproj`). `dotnet` SDK 10.x is required.
 - There is no top-level test runner in this repo; unit tests live in the `SharpHoundCommon` submodule.
+
+## Key Dependencies (GCNet)
+
+| Package | Version | Purpose |
+|---|---|---|
+| Newtonsoft.Json | 13.0.4 | JSON serialisation of change events |
+| Spectre.Console | 0.55.2 | Rich terminal UI / status display |
+| Spectre.Console.Cli | 0.55.0 | Declarative command-line parsing |
+| SharpHoundCommonLib | project ref | LDAP helpers from SharpHoundCommon submodule |
 
 ## Coding Style & Naming Conventions
 
 - C# files use standard .NET conventions: `PascalCase` for types/methods, `camelCase` for locals and parameters.
 - Indentation follows the existing project defaults (4 spaces; no tabs).
 - Keep new files alongside related components in `GCNet/` unless they belong to the submodule.
+- SDK-style csproj — no `App.config`, `packages.config`, or `FodyWeavers.xml` (all removed during migration).
 
 ## Testing Guidelines
 
@@ -36,4 +50,4 @@
 ## Security & Configuration Tips
 
 - GCNet writes potentially sensitive directory data to per-event JSON files. Treat output files as sensitive artifacts.
-- LDAP connections in `GCNet/LDAPSearches.cs` intentionally disable certificate validation; review this if you need stricter security postures.
+- LDAP connections in `GCNet/LdapConnectionFactory.cs` intentionally disable server certificate validation (`VerifyServerCertificate` returns `false`); review this if you need stricter security postures.

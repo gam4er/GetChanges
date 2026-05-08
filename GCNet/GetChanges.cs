@@ -1,4 +1,3 @@
-using CommandLine;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System;

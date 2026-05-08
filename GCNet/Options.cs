@@ -1,5 +1,3 @@
-using CommandLine;
-
 using Spectre.Console.Cli;
 using System.ComponentModel;
 

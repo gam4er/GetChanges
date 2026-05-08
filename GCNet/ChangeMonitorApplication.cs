@@ -17,6 +17,7 @@ namespace GCNet
         private readonly ILdapNotificationLoopService _notificationLoopService;
         private readonly IBaselineSnapshotLoader _baselineSnapshotLoader;
         private long _notificationCount;
+        private long _eventsWrittenCount;
         private StatusContext _statusContext;
 
         public ChangeMonitorApplication()
@@ -62,7 +63,7 @@ namespace GCNet
                 using (var writer = new EventFileWriter(options.OutputDirectory))
                 {
                     var worker = pipeline.StartAsync(lifecycle.Token);
-                    var writerTask = StartWriterLoop(pipeline, writer, lifecycle.Token);
+                    var writerTask = StartWriterLoop(pipeline, writer, lifecycle.Token, OnFileWritten);
                     // Notification loop owns reconnect with capped exponential backoff + jitter,
                     // so the host starts it once and lets the loop self-heal transient LDAP failures.
                     var notificationLoopTask = _notificationLoopService.RunAsync(
@@ -98,11 +99,12 @@ namespace GCNet
                 Target = incoming,
                 DnIgnoreFilters = dnIgnoreFilters,
                 UsePhantomRoot = usePhantomRoot,
-                OnNotificationReceived = OnNotificationReceived
+                OnNotificationReceived = OnNotificationReceived,
+                OnBeforeReconnect = _connectionFactory.ResetCachedDomainController
             };
         }
 
-        private static Task StartWriterLoop(ChangeProcessingPipeline pipeline, EventFileWriter writer, CancellationToken cancellationToken)
+        private static Task StartWriterLoop(ChangeProcessingPipeline pipeline, EventFileWriter writer, CancellationToken cancellationToken, Action onFileWritten)
         {
             return Task.Run(() =>
             {
@@ -111,6 +113,7 @@ namespace GCNet
                     foreach (var item in pipeline.Outgoing.GetConsumingEnumerable(cancellationToken))
                     {
                         writer.WriteEvent(item);
+                        onFileWritten?.Invoke();
                     }
                 }
                 catch (OperationCanceledException)
@@ -156,7 +159,15 @@ namespace GCNet
         private void OnNotificationReceived()
         {
             var totalNotifications = Interlocked.Increment(ref _notificationCount);
-            _statusContext?.Status($"[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] Notifications received total: {totalNotifications}");
+            var filesWritten = Volatile.Read(ref _eventsWrittenCount);
+            _statusContext?.Status($"[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] Notifications: {totalNotifications} | Files written: {filesWritten}");
+        }
+
+        private void OnFileWritten()
+        {
+            var totalFiles = Interlocked.Increment(ref _eventsWrittenCount);
+            var notifications = Volatile.Read(ref _notificationCount);
+            _statusContext?.Status($"[grey]{DateTime.Now:yyyy-MM-dd HH:mm:ss}[/] Notifications: {notifications} | Files written: {totalFiles}");
         }
 
         private static IReadOnlyCollection<string> LoadDnIgnoreFilters(string path)

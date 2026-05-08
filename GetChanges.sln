@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.35122.118
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GetChanges", "GCNet\GetChanges.csproj", "{4E637AA7-DFAD-4015-90C4-857B51F81366}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GetChanges", "GCNet\GetChanges.csproj", "{4E637AA7-DFAD-4015-90C4-857B51F81366}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpHoundCommonLib", "SharpHoundCommon\src\CommonLib\SharpHoundCommonLib.csproj", "{423B8B9B-C184-4AE7-88A9-2B446D17CC71}"
 EndProject
