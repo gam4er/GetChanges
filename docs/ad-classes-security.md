@@ -20,9 +20,11 @@ GCNet перехватывает изменения в AD через persistent 
 
 ## Методология и оговорки
 
-- **Источник определений** — официальная страница MS Learn по схеме AD
-  (`https://learn.microsoft.com/en-us/windows/win32/adschema/`). Каждый GUID
-  в сводной таблице ведёт на соответствующую страницу схемы.
+- **Источник определений** — официальные страницы MS Learn по схеме AD
+  (`https://learn.microsoft.com/en-us/windows/win32/adschema/`) и локальный
+  перечень классов [classSchemaObjectGUID.csv](../classSchemaObjectGUID.csv).
+  Не каждый класс из схемы имеет публичную страницу MS Learn: если страница
+  отдаёт 404, GUID в таблице оставлен обычным текстом и снабжён сноской.
 - **Tier** — отнесение к [Microsoft tiered administration model](https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model):
   - **T0** — компрометация ⇒ контроль над лесом / доменом / KDC.
   - **T1** — серверы и серверные приложения; компрометация даёт массовый доступ к данным.
@@ -30,27 +32,29 @@ GCNet перехватывает изменения в AD через persistent 
 - **Critical** — суммарная оценка того, насколько изменение объекта данного
   класса должно эскалироваться в SOC: **Critical / High / Medium / Low**.
   Учитывает потенциальный impact, а не вероятность.
-- **schemaIDGUID ≠ rightsGuid.** GUID в сводной таблице — это идентификатор
-  _класса схемы_, а не extended right; не путать с GUID-ами в SDDL вида
-  `(OA;;CR;<rightsGuid>;;<sid>)`.
+- **schemaIDGUID ≠ rightsGuid.** GUID в сводной таблице — это well-known
+  идентификатор _класса схемы_, одинаковый во всех лесах AD, а не extended
+  right; не путать с GUID-ами в SDDL вида `(OA;;CR;<rightsGuid>;;<sid>)`.
+- **Well-known идентификаторы не маскируются.** `schemaIDGUID`, `rightsGuid`,
+  OID, default schema SDDL и другие публичные универсальные значения можно и
+  нужно писать полностью. Маскирование применяется к live-значениям конкретной
+  среды: DN, objectGUID, objectSid, SPN, hostnames, UPN, IP и т. п.
 - **Live-данные не цитируем.** В документе используются только дефолтные
   Default Security Descriptors из MS Learn и обезличенные примеры
   (`contoso.local`, `WS-XXXX$`, `S-1-5-21-XXXX-XXXX-XXXX-<RID>`).
-- **Несколько классов отсутствуют на MS Learn** — это, как правило, расширения
-  схемы от Exchange / SCCM / IEEE-Wi-Fi-policy. Для них дана ссылка на
-  [индекс схемы](https://learn.microsoft.com/en-us/windows/win32/adschema/active-directory-schema)
-  и пояснение в сноске.
+- **Проверка ссылок.** Перед сохранением ссылки были проверены HTTP-запросом:
+  66 страниц MS Learn открываются и содержат тот же `Schema-Id-Guid`, что и
+  CSV; 9 классов сейчас возвращают 404 и поэтому не линкованы в таблице.
 
 ## Легенда колонок
 
-| Колонка           | Значение                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| **Class**         | `lDAPDisplayName` объекта класса (как приходит в `objectClass`).                               |
-| **classSchemaCN** | `cn` записи в `CN=Schema,CN=Configuration,DC=…`.                                               |
-| **schemaIDGUID**  | GUID класса. Кликабельная ссылка ведёт на MS Learn.                                            |
-| **Tier**          | T0 / T1 / T2 (см. выше). `—` для абстрактных/структурных.                                      |
-| **Critical**      | Critical / High / Medium / Low.                                                                |
-| **Назначение**    | 1-строчное описание. Для классов с подробным разделом ниже — имя в первой колонке кликабельно. |
+| Колонка | Значение |
+| --- | --- |
+| **Class** | `lDAPDisplayName` объекта класса (как приходит в `objectClass`). Для классов с подробным разделом ниже — имя кликабельно. |
+| **schemaIDGUID** | Полный well-known GUID класса схемы. Кликабельный GUID ведёт на проверенную страницу MS Learn; plain text GUID означает, что публичная страница сейчас не найдена. |
+| **Tier** | T0 / T1 / T2 (см. выше). `—` для абстрактных/структурных. |
+| **Critical** | Critical / High / Medium / Low. |
+| **Назначение** | 1-строчное описание. |
 
 ---
 
@@ -58,93 +62,92 @@ GCNet перехватывает изменения в AD через persistent 
 
 Отсортировано по убыванию Critical, внутри — по имени класса.
 
-| Class                                                                                             | classSchemaCN                        | schemaIDGUID                                                                                               | Tier  | Critical | Назначение                                                                              |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----- | -------- | --------------------------------------------------------------------------------------- |
-| [`domainDNS`](#domaindns)                                                                         | Domain-DNS                           | [19195a5b-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domaindns)                         | T0    | Critical | Корень домена; владеет `nTSecurityDescriptor` всего NC и правами DCSync.                |
-| [`domain`](#domain)                                                                               | Domain                               | [19195a5a-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domain)                            | T0    | Critical | Базовый класс домена; родитель `domainDNS`.                                             |
-| [`samServer`](#samserver)                                                                         | Sam-Server                           | [bf967aad-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-samserver)                         | T0    | Critical | `CN=Server,CN=System` — настройки SAM, расширенное право `SAM-Enumerate-Entire-Domain`. |
-| [`rIDManager`](#ridmanager)                                                                       | RID-Manager                          | [6617188d-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ridmanager)                        | T0    | Critical | Раздаёт RID-пулы DC; контроль ⇒ возможность фабриковать SID.                            |
-| `rIDSet`                                                                                          | RID-Set                              | [7bfdcb89-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ridset)                            | T0    | Critical | Пер-DC RID-пул; см. раздел [`rIDManager`](#ridmanager).                                 |
-| `infrastructureUpdate`                                                                            | Infrastructure-Update                | [2df90d89-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-infrastructureupdate)              | T0    | Critical | Объект FSMO Infrastructure Master; FSMO-владение = расширенные права.                   |
-| [`trustedDomain`](#trusteddomain)                                                                 | Trusted-Domain                       | [bf967ab8-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-trusteddomain)                     | T0    | Critical | Объект доверительных отношений; контроль ⇒ Golden/Trust-ticket, SID-history injection.  |
-| [`domainPolicy`](#domainpolicy)                                                                   | Domain-Policy                        | [bf967a99-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domainpolicy)                      | T0    | Critical | Default Domain Policy attachment-point; legacy, но meta-флаги влияют на Kerberos.       |
-| [`nTFRSReplicaSet`](#ntfrsreplicaset)                                                             | NTFRS-Replica-Set                    | [5245803a-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ntfrsreplicaset)                   | T0    | Critical | Legacy SYSVOL-репликация (FRS); до миграции на DFSR — контроль = SYSVOL tampering.      |
-| `nTFRSSettings`                                                                                   | NTFRS-Settings                       | [f780acc2-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ntfrssettings)                     | T0    | Critical | Контейнер настроек FRS; см. [`nTFRSReplicaSet`](#ntfrsreplicaset).                      |
-| [`groupPolicyContainer`](#grouppolicycontainer)                                                   | Group-Policy-Container               | [f30e3bc2-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-grouppolicycontainer)              | T0    | Critical | AD-часть GPO; запись в `gPCFileSysPath` или GPC ⇒ массовая RCE на linked-SOM.           |
-| [`msDFSR-GlobalSettings`](#msdfsr-семейство)                                                      | ms-DFSR-GlobalSettings               | [7b35dbad-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-globalsettings)             | T0    | Critical | Корневые настройки DFSR; контроль над репликацией SYSVOL.                               |
-| `msDFSR-Topology`                                                                                 | ms-DFSR-Topology                     | [04828aa9-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-topology)                   | T0    | Critical | Топология DFSR; см. [DFSR-семейство](#msdfsr-семейство).                                |
-| `msDFSR-ReplicationGroup`                                                                         | ms-DFSR-ReplicationGroup             | [1c332fe0-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-replicationgroup)           | T0    | Critical | Группа репликации (включая Domain System Volume).                                       |
-| `msDFSR-Content`                                                                                  | ms-DFSR-Content                      | [64759b35-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-content)                    | T0    | Critical | Контейнер контент-наборов RG.                                                           |
-| `msDFSR-ContentSet`                                                                               | ms-DFSR-ContentSet                   | [4937f40d-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-contentset)                 | T0    | Critical | Описание реплицируемой папки (для SYSVOL — путь к SYSVOL\domain).                       |
-| `msDFSR-Member`                                                                                   | ms-DFSR-Member                       | [4229c897-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-member)                     | T0    | Critical | DC-член RG; ссылается на `computer` DC.                                                 |
-| `msDFSR-Subscriber`                                                                               | ms-DFSR-Subscriber                   | [e11505d7-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-subscriber)                 | T0    | High     | Подписчик content-set'а на конкретном DC.                                               |
-| `msDFSR-Subscription`                                                                             | ms-DFSR-Subscription                 | [67212414-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-subscription)               | T0    | High     | Локальная подписка (per-set, per-DC).                                                   |
-| `msDFSR-LocalSettings`                                                                            | ms-DFSR-LocalSettings                | [fa85c591-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-localsettings)              | T0    | High     | Per-DC контейнер DFSR-настроек (под `computer` DC).                                     |
-| `msDFSR-Connection`                                                                               | ms-DFSR-Connection                   | [e58f972e-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-connection)                 | T0    | High     | Описание connection между DFSR-членами.                                                 |
-| [`dnsZone`](#dnszone--dnsnode)                                                                    | Dns-Zone                             | [e0fa1e8b-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnszone)                           | T0/T1 | High     | AD-integrated DNS-зона; контроль ⇒ ADIDNS spoofing, NTLM-relay на DC.                   |
-| `dnsNode`                                                                                         | Dns-Node                             | [e0fa1e8c-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnsnode)                           | T0/T1 | High     | Запись внутри `dnsZone`. См. [DNS](#dnszone--dnsnode).                                  |
-| `dnsZoneScope`                                                                                    | Dns-Zone-Scope                       | [696f8a61-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnszonescope)                      | T0/T1 | Medium   | Split-scope DNS (Windows Server 2016+).                                                 |
-| `dnsZoneScopeContainer`                                                                           | Dns-Zone-Scope-Container             | [f2699093-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnszonescopecontainer)             | T0/T1 | Medium   | Контейнер для `dnsZoneScope`.                                                           |
-| [`user`](#user--person--organizationalperson)                                                     | User                                 | [bf967aba-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-user)                              | T0–T2 | Critical | Учётная запись; включает `krbtgt`, DA, EA, service-accounts.                            |
-| `person`                                                                                          | Person                               | [bf967aa7-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-person)                            | —     | High     | Абстрактный родитель `user`/`organizationalPerson`.                                     |
-| `organizationalPerson`                                                                            | Organizational-Person                | [bf967aa4-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-organizationalperson)              | —     | High     | Абстрактный родитель `user`. Изменение `Person`-атрибутов через этот класс.             |
-| [`group`](#group)                                                                                 | Group                                | [bf967a9c-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-group)                             | T0–T2 | Critical | Группа безопасности/рассылки; членство в `Domain Admins` и т. п.                        |
-| [`computer`](#computer)                                                                           | Computer                             | [bf967a86-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-computer)                          | T0–T2 | High     | Машинная учётка; включает DC. RBCD, S4U, LAPS, BitLocker recovery.                      |
-| [`msDS-GroupManagedServiceAccount`](#msds-groupmanagedserviceaccount--msds-managedserviceaccount) | ms-DS-Group-Managed-Service-Account  | [7b8b558a-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msds-groupmanagedserviceaccount)   | T0/T1 | High     | gMSA; чтение `msDS-ManagedPassword` ⇒ компрометация сервиса.                            |
-| `msDS-ManagedServiceAccount`                                                                      | ms-DS-Managed-Service-Account        | [ce206244-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msds-managedserviceaccount)        | T1    | High     | sMSA (single-host MSA).                                                                 |
-| [`foreignSecurityPrincipal`](#foreignsecurityprincipal)                                           | Foreign-Security-Principal           | [89e31c12-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-foreignsecurityprincipal)          | T0–T2 | High     | Заглушка под внешний SID (cross-forest, well-known). SID-history abuse.                 |
-| [`msWMI-Som`](#mswmi-som)                                                                         | ms-WMI-Som                           | [ab857078-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-mswmi-som)                         | T1/T2 | High     | WMI-фильтр GPO; влияет, к каким машинам применяется политика.                           |
-| [`classStore`](#classstore--packageregistration--intellimirrorscp)                                | Class-Store                          | [bf967a84-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-classstore)                        | T1/T2 | High     | Контейнер для GPSI (software install via GPO).                                          |
-| `packageRegistration`                                                                             | Package-Registration                 | [bf967aa6-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-packageregistration)               | T1/T2 | High     | Зарегистрированный MSI/ZAP-пакет в GPSI. SYSTEM-RCE на target.                          |
-| `intellimirrorSCP`                                                                                | Intellimirror-SCP                    | [07383085-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-intellimirrorscp)                  | T1/T2 | High     | SCP старого IntelliMirror-сервиса деплоя.                                               |
-| [`mSSMSManagementPoint`](#mssms-семейство-sccm--mecm)                                             | MS-SMS-Management-Point              | d92f3bd1-… [†](#sccm-note)                                                                                 | T1    | High     | SCCM Management Point SCP; компрометация SCCM = массовая RCE.                           |
-| `mSSMSSite`                                                                                       | MS-SMS-Site                          | b409d5ef-… [†](#sccm-note)                                                                                 | T1    | High     | SCCM Site SCP.                                                                          |
-| `mSSMSRoamingBoundaryRange`                                                                       | MS-SMS-Roaming-Boundary-Range        | f5f05029-… [†](#sccm-note)                                                                                 | T1    | Medium   | Boundary-ranges клиентов SCCM.                                                          |
-| [`organizationalUnit`](#organizationalunit--container--builtindomain)                             | Organizational-Unit                  | [bf967aa5-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-organizationalunit)                | T0–T2 | High     | Контейнер с собственным ACL; делегирование, gpLink.                                     |
-| `container`                                                                                       | Container                            | [bf967a8b-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-container)                         | T0–T2 | High     | Системный контейнер (включая `CN=AdminSDHolder`, `CN=Users`).                           |
-| `builtinDomain`                                                                                   | Builtin-Domain                       | [bf967a81-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-builtindomain)                     | T0    | High     | `CN=Builtin` — Administrators, Account Operators и т.п.                                 |
-| [`serviceConnectionPoint`](#serviceconnectionpoint--serviceadministrationpoint)                   | Service-Connection-Point             | [28630ec1-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceconnectionpoint)            | T1/T2 | Medium   | Публикация сервиса в AD. Rogue SCP ⇒ coerce auth, NTLM relay.                           |
-| `serviceAdministrationPoint`                                                                      | Service-Administration-Point         | [b7b13123-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceadministrationpoint)        | T1/T2 | Medium   | SCP для административных интерфейсов.                                                   |
-| [`rRASAdministrationConnectionPoint`](#rrasadministrationconnectionpoint)                         | RRAS-Administration-Connection-Point | [2a39c5be-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-rrasadministrationconnectionpoint) | T1    | Medium   | Публикация RRAS/VPN-сервера; периметр.                                                  |
-| [`ipsecBase`](#ipsec-классы)                                                                      | Ipsec-Base                           | [b40ff825-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ipsecbase)                         | T1    | Medium   | Базовый класс IPSec policy.                                                             |
-| `ipsecNegotiationPolicy`                                                                          | Ipsec-Negotiation-Policy             | [b40ff827-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ipsecnegotiationpolicy)            | T1    | Medium   | Политика IPSec-переговоров (legacy).                                                    |
-| [`ms-net-ieee-80211-GroupPolicy`](#wi-fi-group-policy-классы)                                     | ms-net-ieee-80211-GroupPolicy        | [1cb81863-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ms-net-ieee-80211-grouppolicy)     | T2    | Medium   | 802.11 (Wi-Fi) GP; PSK/EAP-конфиги.                                                     |
-| `msieee80211-Policy`                                                                              | ms-ieee-80211-Policy                 | 7b9a2d92-… [†](#ieee-note)                                                                                 | T2    | Medium   | Старый формат 802.11 policy.                                                            |
-| [`msDS-DeviceContainer`](#msds-devicecontainer)                                                   | ms-DS-Device-Container               | 7c9e8c58-… [†](#device-container-note)                                                                     | T1/T2 | Medium   | Контейнер `msDS-Device` объектов (Hybrid Azure AD Join).                                |
-| `msExchSystemObjectsContainer`                                                                    | ms-Exch-System-Objects-Container     | [0bffa04c-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msexchsystemobjectscontainer)      | T1    | Medium   | Контейнер system-объектов Exchange; исторически Exchange Windows Permissions.           |
-| `msExchDynamicDistributionList`                                                                   | ms-Exch-Dynamic-Distribution-List    | 018849b0-… [†](#exchange-note)                                                                             | T2    | Low      | Динамическая DL Exchange.                                                               |
-| `dfsConfiguration`                                                                                | Dfs-Configuration                    | [8447f9f2-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dfsconfiguration)                  | T1    | Medium   | DFS-N namespace root в AD; редирект на ложные шары.                                     |
-| `fTDfs`                                                                                           | FT-Dfs                               | [8447f9f3-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ftdfs)                             | T1    | Medium   | Fault-tolerant DFS root.                                                                |
-| [`ms-srvShareMapping`](#ms-srvsharemapping)                                                       | ms-SrvShareMapping                   | c356f65b-… [†](#share-mapping-note)                                                                        | T2    | Medium   | Per-user маппинги шар (Folder Redirection / Roaming).                                   |
-| `volume`                                                                                          | Volume                               | [bf967abb-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-volume)                            | T2    | Medium   | Опубликованная шара.                                                                    |
-| `printQueue`                                                                                      | Print-Queue                          | [bf967aa8-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-printqueue)                        | T1/T2 | Medium   | Опубликованный принтер; контекст PrintNightmare.                                        |
-| `mSMQConfiguration`                                                                               | MSMQ-Configuration                   | [9a0dc344-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msmqconfiguration)                 | T1    | Medium   | MSMQ host-config; legacy CVE (QueueJumper и др.).                                       |
-| `mSMQQueue`                                                                                       | MSMQ-Queue                           | [9a0dc343-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msmqqueue)                         | T1    | Medium   | Публичная очередь MSMQ.                                                                 |
-| `securityObject`                                                                                  | Security-Object                      | [bf967aaf-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-securityobject)                    | —     | Medium   | Базовый класс для объектов с `nTSecurityDescriptor`.                                    |
-| `connectionPoint`                                                                                 | Connection-Point                     | [5cb41ecf-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-connectionpoint)                   | —     | Low      | Абстрактный родитель SCP-классов.                                                       |
-| `applicationSettings`                                                                             | Application-Settings                 | [f780acc1-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-applicationsettings)               | T2    | Low      | Настройки приложения, опубликованные в AD.                                              |
-| `categoryRegistration`                                                                            | Category-Registration                | [7d6c0e9d-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-categoryregistration)              | —     | Low      | Регистрация COM-категорий.                                                              |
-| `serviceClass`                                                                                    | Service-Class                        | [bf967ab1-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceclass)                      | —     | Low      | Описание service class (legacy).                                                        |
-| `serviceInstance`                                                                                 | Service-Instance                     | [bf967ab2-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceinstance)                   | —     | Low      | Конкретный экземпляр сервиса (legacy).                                                  |
-| `rpcContainer`                                                                                    | Rpc-Container                        | [80212842-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-rpccontainer)                      | T1    | Low      | Контейнер для RPC SCP.                                                                  |
-| `contact`                                                                                         | Contact                              | [5cb41ed0-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-contact)                           | T2    | Low      | Контакт без login (mail, phone).                                                        |
-| `top`                                                                                             | Top                                  | [bf967ab7-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-top)                               | —     | Low      | Корневой класс схемы.                                                                   |
-| `leaf`                                                                                            | Leaf                                 | [bf967a9e-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-leaf)                              | —     | Low      | Абстрактный leaf-класс.                                                                 |
-| `lostAndFound`                                                                                    | Lost-And-Found                       | [52ab8671-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-lostandfound)                      | —     | Low      | Контейнер «осиротевших» объектов после конфликтов репликации.                           |
-| `fileLinkTracking`                                                                                | File-Link-Tracking                   | [dd712229-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-filelinktracking)                  | T2    | Low      | Distributed Link Tracking.                                                              |
-| `linkTrackObjectMoveTable`                                                                        | Link-Track-Object-Move-Table         | [ddac0cf5-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-linktrackobjectmovetable)          | T2    | Low      | Таблица DLT.                                                                            |
-| `linkTrackOMTEntry`                                                                               | Link-Track-OMT-Entry                 | [ddac0cf7-…](https://learn.microsoft.com/en-us/windows/win32/adschema/c-linktrackomtentry)                 | T2    | Low      | Запись DLT.                                                                             |
-| `msImaging-PSPs`                                                                                  | ms-Imaging-PSPs                      | a0ed2ac1-… [†](#imaging-note)                                                                              | T2    | Low      | PSP-конфиги для сканеров (WIA).                                                         |
+| Class | schemaIDGUID | Tier | Critical | Назначение |
+| --- | --- | --- | --- | --- |
+| [`domainDNS`](#domaindns) | [19195a5b-6da0-11d0-afd3-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domaindns) | T0 | Critical | Корень домена; владеет `nTSecurityDescriptor` всего NC и правами DCSync. |
+| [`domain`](#domain) | [19195a5a-6da0-11d0-afd3-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domain) | T0 | Critical | Базовый класс домена; родитель `domainDNS`. |
+| [`samServer`](#samserver) | [bf967aad-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-samserver) | T0 | Critical | `CN=Server,CN=System` — настройки SAM, расширенное право `SAM-Enumerate-Entire-Domain`. |
+| [`rIDManager`](#ridmanager) | [6617188d-8f3c-11d0-afda-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ridmanager) | T0 | Critical | Раздаёт RID-пулы DC; контроль ⇒ возможность фабриковать SID. |
+| `rIDSet` | [7bfdcb89-4807-11d1-a9c3-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ridset) | T0 | Critical | Пер-DC RID-пул; см. раздел [`rIDManager`](#ridmanager). |
+| `infrastructureUpdate` | [2df90d89-009f-11d2-aa4c-00c04fd7d83a](https://learn.microsoft.com/en-us/windows/win32/adschema/c-infrastructureupdate) | T0 | Critical | Объект FSMO Infrastructure Master; FSMO-владение = расширенные права. |
+| [`trustedDomain`](#trusteddomain) | [bf967ab8-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-trusteddomain) | T0 | Critical | Объект доверительных отношений; контроль ⇒ Golden/Trust-ticket, SID-history injection. |
+| [`domainPolicy`](#domainpolicy) | [bf967a99-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-domainpolicy) | T0 | Critical | Default Domain Policy attachment-point; legacy, но meta-флаги влияют на Kerberos. |
+| [`nTFRSReplicaSet`](#ntfrsreplicaset) | [5245803a-ca6a-11d0-afff-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ntfrsreplicaset) | T0 | Critical | Legacy SYSVOL-репликация (FRS); до миграции на DFSR — контроль = SYSVOL tampering. |
+| `nTFRSSettings` | [f780acc2-56f0-11d1-a9c6-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ntfrssettings) | T0 | Critical | Контейнер настроек FRS; см. [`nTFRSReplicaSet`](#ntfrsreplicaset). |
+| [`groupPolicyContainer`](#grouppolicycontainer) | [f30e3bc2-9ff0-11d1-b603-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-grouppolicycontainer) | T0 | Critical | AD-часть GPO; запись в `gPCFileSysPath` или GPC ⇒ массовая RCE на linked-SOM. |
+| [`msDFSR-GlobalSettings`](#msdfsr-family) | [7b35dbad-b3ec-486a-aad4-2fec9d6ea6f6](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-globalsettings) | T0 | Critical | Корневые настройки DFSR; контроль над репликацией SYSVOL. |
+| `msDFSR-Topology` | [04828aa9-6e42-4e80-b962-e2fe00754d17](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-topology) | T0 | Critical | Топология DFSR; см. [DFSR-семейство](#msdfsr-family). |
+| `msDFSR-ReplicationGroup` | [1c332fe0-0c2a-4f32-afca-23c5e45a9e77](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-replicationgroup) | T0 | Critical | Группа репликации (включая Domain System Volume). |
+| `msDFSR-Content` | [64759b35-d3a1-42e4-b5f1-a3de162109b3](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-content) | T0 | Critical | Контейнер контент-наборов RG. |
+| `msDFSR-ContentSet` | [4937f40d-a6dc-4d48-97ca-06e5fbfd3f16](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-contentset) | T0 | Critical | Описание реплицируемой папки (для SYSVOL — путь к SYSVOL\domain). |
+| `msDFSR-Member` | [4229c897-c211-437c-a5ae-dbf705b696e5](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-member) | T0 | Critical | DC-член RG; ссылается на `computer` DC. |
+| `msDFSR-Subscriber` | [e11505d7-92c4-43e7-bf5c-295832ffc896](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-subscriber) | T0 | High | Подписчик content-set'а на конкретном DC. |
+| `msDFSR-Subscription` | [67212414-7bcc-4609-87e0-088dad8abdee](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-subscription) | T0 | High | Локальная подписка (per-set, per-DC). |
+| `msDFSR-LocalSettings` | [fa85c591-197f-477e-83bd-ea5a43df2239](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-localsettings) | T0 | High | Per-DC контейнер DFSR-настроек (под `computer` DC). |
+| `msDFSR-Connection` | [e58f972e-64b5-46ef-8d8b-bbc3e1897eab](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msdfsr-connection) | T0 | High | Описание connection между DFSR-членами. |
+| [`dnsZone`](#dns-zone-dns-node) | [e0fa1e8b-9b45-11d0-afdd-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnszone) | T0/T1 | High | AD-integrated DNS-зона; контроль ⇒ ADIDNS spoofing, NTLM-relay на DC. |
+| `dnsNode` | [e0fa1e8c-9b45-11d0-afdd-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dnsnode) | T0/T1 | High | Запись внутри `dnsZone`. См. [DNS](#dns-zone-dns-node). |
+| `dnsZoneScope` | 696f8a61-2d3f-40ce-a4b3-e275dfcc49c5 [†](#dns-scope-note) | T0/T1 | Medium | Split-scope DNS (Windows Server 2016+). |
+| `dnsZoneScopeContainer` | f2699093-f25a-4220-9deb-03df4cc4a9c5 [†](#dns-scope-note) | T0/T1 | Medium | Контейнер для `dnsZoneScope`. |
+| [`user`](#user-person-organizationalperson) | [bf967aba-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-user) | T0–T2 | Critical | Учётная запись; включает `krbtgt`, DA, EA, service-accounts. |
+| `person` | [bf967aa7-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-person) | — | High | Абстрактный родитель `user`/`organizationalPerson`. |
+| `organizationalPerson` | [bf967aa4-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-organizationalperson) | — | High | Абстрактный родитель `user`. Изменение `Person`-атрибутов через этот класс. |
+| [`group`](#group) | [bf967a9c-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-group) | T0–T2 | Critical | Группа безопасности/рассылки; членство в `Domain Admins` и т. п. |
+| [`computer`](#computer) | [bf967a86-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-computer) | T0–T2 | High | Машинная учётка; включает DC. RBCD, S4U, LAPS, BitLocker recovery. |
+| [`msDS-GroupManagedServiceAccount`](#msa-gmsa) | [7b8b558a-93a5-4af7-adca-c017e67f1057](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msds-groupmanagedserviceaccount) | T0/T1 | High | gMSA; чтение `msDS-ManagedPassword` ⇒ компрометация сервиса. |
+| `msDS-ManagedServiceAccount` | [ce206244-5827-4a86-ba1c-1c0c386c1b64](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msds-managedserviceaccount) | T1 | High | sMSA (single-host MSA). |
+| [`foreignSecurityPrincipal`](#foreignsecurityprincipal) | [89e31c12-8530-11d0-afda-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-foreignsecurityprincipal) | T0–T2 | High | Заглушка под внешний SID (cross-forest, well-known). SID-history abuse. |
+| [`msWMI-Som`](#mswmi-som) | [ab857078-0142-4406-945b-34c9b6b13372](https://learn.microsoft.com/en-us/windows/win32/adschema/c-mswmi-som) | T1/T2 | High | WMI-фильтр GPO; влияет, к каким машинам применяется политика. |
+| [`classStore`](#software-installation-classes) | [bf967a84-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-classstore) | T1/T2 | High | Контейнер для GPSI (software install via GPO). |
+| `packageRegistration` | [bf967aa6-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-packageregistration) | T1/T2 | High | Зарегистрированный MSI/ZAP-пакет в GPSI. SYSTEM-RCE на target. |
+| `intellimirrorSCP` | [07383085-91df-11d1-aebc-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-intellimirrorscp) | T1/T2 | High | SCP старого IntelliMirror-сервиса деплоя. |
+| [`mSSMSManagementPoint`](#sccm-mecm-classes) | d92f3bd1-e96a-4d0f-8199-daef4d66328a [†](#sccm-note) | T1 | High | SCCM Management Point SCP; компрометация SCCM = массовая RCE. |
+| `mSSMSSite` | b409d5ef-cf6a-48a8-8753-7ce01f74fbd2 [†](#sccm-note) | T1 | High | SCCM Site SCP. |
+| `mSSMSRoamingBoundaryRange` | f5f05029-a1cc-4083-9534-6a45d80b7e0b [†](#sccm-note) | T1 | Medium | Boundary-ranges клиентов SCCM. |
+| [`organizationalUnit`](#ou-container-builtin) | [bf967aa5-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-organizationalunit) | T0–T2 | High | Контейнер с собственным ACL; делегирование, gpLink. |
+| `container` | [bf967a8b-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-container) | T0–T2 | High | Системный контейнер (включая `CN=AdminSDHolder`, `CN=Users`). |
+| `builtinDomain` | [bf967a81-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-builtindomain) | T0 | High | `CN=Builtin` — Administrators, Account Operators и т.п. |
+| [`serviceConnectionPoint`](#scp-classes) | [28630ec1-41d5-11d1-a9c1-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceconnectionpoint) | T1/T2 | Medium | Публикация сервиса в AD. Rogue SCP ⇒ coerce auth, NTLM relay. |
+| `serviceAdministrationPoint` | [b7b13123-b82e-11d0-afee-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceadministrationpoint) | T1/T2 | Medium | SCP для административных интерфейсов. |
+| [`rRASAdministrationConnectionPoint`](#rrasadministrationconnectionpoint) | [2a39c5be-8960-11d1-aebc-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-rrasadministrationconnectionpoint) | T1 | Medium | Публикация RRAS/VPN-сервера; периметр. |
+| [`ipsecBase`](#ipsec-classes) | [b40ff825-427a-11d1-a9c2-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ipsecbase) | T1 | Medium | Базовый класс IPSec policy. |
+| `ipsecNegotiationPolicy` | [b40ff827-427a-11d1-a9c2-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ipsecnegotiationpolicy) | T1 | Medium | Политика IPSec-переговоров (legacy). |
+| [`ms-net-ieee-80211-GroupPolicy`](#wifi-policy-classes) | [1cb81863-b822-4379-9ea2-5ff7bdc6386d](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ms-net-ieee-80211-grouppolicy) | T2 | Medium | 802.11 (Wi-Fi) GP; PSK/EAP-конфиги. |
+| `msieee80211-Policy` | [7b9a2d92-b7eb-4382-9772-c3e0f9baaf94](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msieee80211-policy) | T2 | Medium | Старый формат 802.11 policy. |
+| [`msDS-DeviceContainer`](#msds-devicecontainer) | 7c9e8c58-901b-4ea8-b6ec-4eb9e9fc0e11 [†](#device-container-note) | T1/T2 | Medium | Контейнер `msDS-Device` объектов (Hybrid Azure AD Join). |
+| `msExchSystemObjectsContainer` | 0bffa04c-7d8e-44cd-968a-b2cac11d17e1 [†](#exchange-note) | T1 | Medium | Контейнер system-объектов Exchange; исторически Exchange Windows Permissions. |
+| `msExchDynamicDistributionList` | 018849b0-a981-11d2-a9ff-00c04f8eedd8 [†](#exchange-note) | T2 | Low | Динамическая DL Exchange. |
+| `dfsConfiguration` | [8447f9f2-1027-11d0-a05f-00aa006c33ed](https://learn.microsoft.com/en-us/windows/win32/adschema/c-dfsconfiguration) | T1 | Medium | DFS-N namespace root в AD; редирект на ложные шары. |
+| `fTDfs` | [8447f9f3-1027-11d0-a05f-00aa006c33ed](https://learn.microsoft.com/en-us/windows/win32/adschema/c-ftdfs) | T1 | Medium | Fault-tolerant DFS root. |
+| [`ms-srvShareMapping`](#ms-srvsharemapping) | c356f65b-5540-4d85-9aef-3a7ecae7a878 [†](#share-mapping-note) | T2 | Medium | Per-user маппинги шар (Folder Redirection / Roaming). |
+| `volume` | [bf967abb-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-volume) | T2 | Medium | Опубликованная шара. |
+| `printQueue` | [bf967aa8-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-printqueue) | T1/T2 | Medium | Опубликованный принтер; контекст PrintNightmare. |
+| `mSMQConfiguration` | [9a0dc344-c100-11d1-bbc5-0080c76670c0](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msmqconfiguration) | T1 | Medium | MSMQ host-config; legacy CVE (QueueJumper и др.). |
+| `mSMQQueue` | [9a0dc343-c100-11d1-bbc5-0080c76670c0](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msmqqueue) | T1 | Medium | Публичная очередь MSMQ. |
+| `securityObject` | [bf967aaf-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-securityobject) | — | Medium | Базовый класс для объектов с `nTSecurityDescriptor`. |
+| `connectionPoint` | [5cb41ecf-0e4c-11d0-a286-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-connectionpoint) | — | Low | Абстрактный родитель SCP-классов. |
+| `applicationSettings` | [f780acc1-56f0-11d1-a9c6-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-applicationsettings) | T2 | Low | Настройки приложения, опубликованные в AD. |
+| `categoryRegistration` | [7d6c0e9d-7e20-11d0-afd6-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-categoryregistration) | — | Low | Регистрация COM-категорий. |
+| `serviceClass` | [bf967ab1-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceclass) | — | Low | Описание service class (legacy). |
+| `serviceInstance` | [bf967ab2-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-serviceinstance) | — | Low | Конкретный экземпляр сервиса (legacy). |
+| `rpcContainer` | [80212842-4bdc-11d1-a9c4-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-rpccontainer) | T1 | Low | Контейнер для RPC SCP. |
+| `contact` | [5cb41ed0-0e4c-11d0-a286-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-contact) | T2 | Low | Контакт без login (mail, phone). |
+| `top` | [bf967ab7-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-top) | — | Low | Корневой класс схемы. |
+| `leaf` | [bf967a9e-0de6-11d0-a285-00aa003049e2](https://learn.microsoft.com/en-us/windows/win32/adschema/c-leaf) | — | Low | Абстрактный leaf-класс. |
+| `lostAndFound` | [52ab8671-5709-11d1-a9c6-0000f80367c1](https://learn.microsoft.com/en-us/windows/win32/adschema/c-lostandfound) | — | Low | Контейнер «осиротевших» объектов после конфликтов репликации. |
+| `fileLinkTracking` | [dd712229-10e4-11d0-a05f-00aa006c33ed](https://learn.microsoft.com/en-us/windows/win32/adschema/c-filelinktracking) | T2 | Low | Distributed Link Tracking. |
+| `linkTrackObjectMoveTable` | [ddac0cf5-af8f-11d0-afeb-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-linktrackobjectmovetable) | T2 | Low | Таблица DLT. |
+| `linkTrackOMTEntry` | [ddac0cf7-af8f-11d0-afeb-00c04fd930c9](https://learn.microsoft.com/en-us/windows/win32/adschema/c-linktrackomtentry) | T2 | Low | Запись DLT. |
+| `msImaging-PSPs` | [a0ed2ac1-970c-4777-848e-ec63a0ec44fc](https://learn.microsoft.com/en-us/windows/win32/adschema/c-msimaging-psps) | T2 | Low | PSP-конфиги для сканеров (WIA). |
 
-**Сноски к нестандартным URL (не имеют публичной страницы на MS Learn adschema):**
+**Сноски к GUID без проверенной страницы MS Learn:**
 
 - <a id="sccm-note"></a>† SCCM/MECM-расширения (`mSSMS*`) — вендорная схема ConfigMgr; описание см. в
   [ConfigMgr documentation: Schema extensions](https://learn.microsoft.com/en-us/mem/configmgr/core/plan-design/network/extend-the-active-directory-schema).
-- <a id="ieee-note"></a>† Старая 802.11 policy (`msieee80211-Policy`) была заменена на `ms-net-ieee-80211-GroupPolicy`.
+- <a id="dns-scope-note"></a>† `dnsZoneScope` и `dnsZoneScopeContainer` присутствуют в Windows DNS Server / AD DS schema, но публичные страницы `c-dnszonescope` и `c-dnszonescopecontainer` сейчас возвращают 404.
 - <a id="device-container-note"></a>† `msDS-DeviceContainer` упоминается в документации [Hybrid Azure AD Join](https://learn.microsoft.com/en-us/entra/identity/devices/concept-hybrid-join), отдельной adschema-страницы нет.
-- <a id="exchange-note"></a>† Exchange schema (`msExch*`) описана в документации Exchange, не в adschema-индексе.
-- <a id="share-mapping-note"></a>† `ms-srvShareMapping` — расширение Folder Redirection; см. ldapDisplayName в `CN=Schema` живого леса.
-- <a id="imaging-note"></a>† `msImaging-PSPs` — расширение для Windows Image Acquisition.
+- <a id="exchange-note"></a>† Exchange schema (`msExch*`) описана в документации Exchange; проверенные adschema URL для этих двух классов сейчас возвращают 404.
+- <a id="share-mapping-note"></a>† `ms-srvShareMapping` — расширение Folder Redirection / roaming share mappings; проверенный adschema URL сейчас возвращает 404.
 
 ---
 
@@ -214,8 +217,11 @@ GCNet перехватывает изменения в AD через persistent 
 **Detection / GCNet.**
 
 - Изменение `nTSecurityDescriptor` на CN=Server,CN=System — Critical.
-- Любые ACE с `OBJECT_TYPE` = `0ab4bc02-…` (`Domain-Administer-Server`)
-  или `91d67418-…` (`SAM-Enumerate-Entire-Domain`) на нестандартных
+- Любые ACE с `OBJECT_TYPE` =
+  [`ab721a52-1e2f-11d0-9819-00aa0040529b`](https://learn.microsoft.com/en-us/windows/win32/adschema/r-domain-administer-server)
+  (`Domain-Administer-Server`) или
+  [`91d67418-0135-4acc-8d79-c08e857cfbec`](https://learn.microsoft.com/en-us/windows/win32/adschema/r-sam-enumerate-entire-domain)
+  (`SAM-Enumerate-Entire-Domain`) на нестандартных
   принципалах — High.
 
 ---
@@ -238,8 +244,8 @@ RID-пулы DC-ам через атрибут `rIDAvailablePool` (64-битны
 **Detection / GCNet.**
 
 - Прямые изменения `rIDAvailablePool` вне FSMO-операций — Critical.
-- `rIDNextRID` или `rIDPreviousAllocationPool` смены — нормальный
-  trafiс при работе DC; alert только на скачки.
+- Изменения `rIDNextRID` или `rIDPreviousAllocationPool` — нормальный
+  служебный трафик при работе DC; алёрт только на резкие скачки.
 
 ---
 
@@ -274,8 +280,8 @@ RID-пулы DC-ам через атрибут `rIDAvailablePool` (64-битны
 
 - Любое создание/удаление `trustedDomain` — Critical.
 - Изменение `trustAttributes` (особенно сброс quarantine-битов) — Critical.
-- Изменения `trustAuth*` — Critical (даже легитимные password rolling
-  идут с известной периодичностью и должны быть skedjul'ом).
+- Изменения `trustAuth*` — Critical (даже легитимная ротация trust secret
+  идёт с известной периодичностью и должна быть запланированной).
 
 ---
 
@@ -358,6 +364,8 @@ AD-часть содержит `gPCFileSysPath`, `gPCFunctionalityVersion`,
 
 ---
 
+<a id="msdfsr-family"></a>
+
 ## msDFSR-семейство
 
 **Назначение.** Distributed File System Replication — современный механизм
@@ -396,6 +404,8 @@ CN=DFSR-LocalSettings,CN=<DC>,…  (под каждым `computer`-объект�
 
 ---
 
+<a id="dns-zone-dns-node"></a>
+
 ## dnsZone / dnsNode
 
 **Назначение.** AD-integrated DNS. `dnsZone` — зона (например, `contoso.local`),
@@ -413,8 +423,8 @@ Default Security Descriptor `dnsZone` (Windows Server 2003+):
 - Подмена SRV-записей `_kerberos._tcp.dc._msdcs` ⇒ перенаправление
   Kerberos-аутентификации на rogue-KDC.
 - Создание wildcard `*` в зоне ⇒ перехват любых неразрешённых имён.
-- WriteProperty `dnsRecord` существующего `dnsNode` ⇒ overwrite legitimate
-  записей (нужна выше привилегия — ACL обычно ограничен `CreatorOwner`).
+- WriteProperty `dnsRecord` существующего `dnsNode` ⇒ перезапись легитимных
+  записей (нужны более высокие права — ACL обычно ограничен `CreatorOwner`).
 - Контроль над `dnsZone.nTSecurityDescriptor` ⇒ тотальный контроль зоны.
 
 **Detection / GCNet.**
@@ -425,6 +435,8 @@ Default Security Descriptor `dnsZone` (Windows Server 2003+):
 - Изменение `nTSecurityDescriptor` `dnsZone` — Critical.
 
 ---
+
+<a id="user-person-organizationalperson"></a>
 
 ## user / person / organizationalPerson
 
@@ -478,7 +490,7 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
   `TRUSTED_TO_AUTH_FOR_DELEGATION`, `DONT_REQUIRE_PREAUTH` — High.
 - `unicodePwd` сбросы для DA/T0 — Critical; для остальных — корреляция
   с тикетом.
-- `sIDHistory` smen — Critical.
+- Изменения `sIDHistory` — Critical.
 - `nTSecurityDescriptor` смены на user → проверка ACE для
   `DS-Replication-Get-Changes-All` (DCSync), `User-Force-Change-Password`,
   `Self-Membership` (для group), `Reset-Password`, GenericAll/WriteDACL.
@@ -513,7 +525,8 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
 **Detection / GCNet.**
 
 - Любое изменение `member` для protected groups — Critical (даже если
-  владелец-account legitimate, должно проходить через PIM/JIT).
+  изменение выполняет легитимная учётная запись владельца, оно должно
+  проходить через PIM/JIT).
 - Изменение `adminCount` (особенно сброс с 1 в 0 — попытка убрать ACL
   AdminSDHolder, чтобы потом тихо WriteDACL — известный bypass) — High.
 - Изменение `groupType` — High.
@@ -531,7 +544,7 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
 **Ключевые атрибуты безопасности.**
 
 - `userAccountControl`: `WORKSTATION_TRUST_ACCOUNT`, `SERVER_TRUST_ACCOUNT`,
-  флаги делегирования (см. [`user`](#user--person--organizationalperson)).
+  флаги делегирования (см. [`user`](#user-person-organizationalperson)).
 - `msDS-AllowedToActOnBehalfOfOtherIdentity` — **RBCD primitive**: SD на
   acceptor; кто записан, тот может S4U2Proxy-подменять любого юзера.
 - `msDS-AllowedToDelegateTo` — constrained delegation цели.
@@ -553,8 +566,10 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
   (длинные пароли, но всё равно offline target).
 - Чтение LAPS-атрибутов ⇒ local admin на сотнях машин.
 - Чтение BitLocker recovery key ⇒ offline-доступ к диску.
-- Удаление computer DC и пересоздание под контролем атакующего —
-  «Sticky Notes» бэкдор (S-1-5-…-1XXX RID повторно).
+- Удаление computer-объекта DC и пересоздание под контролем атакующего —
+  риск повторного использования имени, SPN и доверия к роли DC; в норме
+  такие операции должны проходить только через контролируемую процедуру
+  вывода/ввода контроллера домена.
 - Shadow Credentials (`msDS-KeyCredentialLink`) на DC ⇒ TGT за DC ⇒
   DCSync.
 
@@ -569,6 +584,8 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
 - `dNSHostName` mismatch с CN — High (CVE-2022-26923).
 
 ---
+
+<a id="msa-gmsa"></a>
 
 ## msDS-GroupManagedServiceAccount / msDS-ManagedServiceAccount
 
@@ -620,9 +637,9 @@ MSA/gMSA), Read-Only DC `krbtgt_<XXXXX>`.
   semantics) и SID-history pivots; современный SID-filter quarantine
   отсекает большинство.
 - Изменение членства локальных групп через FSP-объект (`member` ссылается
-  на FSP) — equivalent изменению `member` напрямую; проверять цепочку.
+  на FSP) — эквивалент прямого изменения `member`; проверять всю цепочку.
 
-**Detection.** Создание новых FSP вне legitimate trust-cycle — High.
+**Detection.** Создание новых FSP вне легитимного цикла управления trust — High.
 
 ---
 
@@ -652,6 +669,8 @@ Descriptor по схеме разрешает `Authenticated Users` чтение
 
 ---
 
+<a id="software-installation-classes"></a>
+
 ## classStore / packageRegistration / intellimirrorSCP
 
 **Назначение.** Семейство объектов GPSI (Group Policy Software Installation).
@@ -676,6 +695,8 @@ SCP. Установка идёт в SYSTEM-контексте на target.
 
 ---
 
+<a id="sccm-mecm-classes"></a>
+
 ## mSSMS-семейство (SCCM / MECM)
 
 **Назначение.** SCCM/MECM публикует Management Point, Site, Boundary
@@ -688,7 +709,7 @@ ranges в AD как SCP-классы. Клиенты находят MP чере�
   endpoint ⇒ клиенты получают политики атакующего ⇒ массовая
   RCE через SCCM Application deployment под SYSTEM.
 - Изменение `mSSMSSite` ⇒ влияние на site-routing.
-- `mSSMSRoamingBoundaryRange` smens ⇒ перенаправление клиентов между
+- Изменение `mSSMSRoamingBoundaryRange` ⇒ перенаправление клиентов между
   сайтами.
 
 **Detection / GCNet.**
@@ -698,6 +719,8 @@ ranges в AD как SCP-классы. Клиенты находят MP чере�
 - Любые изменения SCP-атрибутов с упоминанием URL/host — High.
 
 ---
+
+<a id="ou-container-builtin"></a>
 
 ## organizationalUnit / container / builtinDomain
 
@@ -726,6 +749,8 @@ default-группами Administrators/Backup Operators/Print Operators/etc.
 - ACL-смены на корневых OU/контейнерах — High.
 
 ---
+
+<a id="scp-classes"></a>
 
 ## serviceConnectionPoint / serviceAdministrationPoint
 
@@ -757,14 +782,16 @@ SCCM, AD CS, кастомные сервисы). Клиенты находят �
 «This object contains the connection point for RRAS». Указывает клиентам
 RRAS-консоли/админ-инструментов, где находится сервер.
 
-**Attacker view.** Аналогично [SCP](#serviceconnectionpoint--serviceadministrationpoint):
+**Attacker view.** Аналогично [SCP](#scp-classes):
 rogue-RRAS-SCP может склонить администратора подключиться к подконтрольному
-endpoint. RAS-серверы — periметральные, поэтому компрометация = pivot
+endpoint. RAS-серверы — периметральные, поэтому компрометация = pivot
 из/в внутреннюю сеть.
 
 **Detection.** Создание/удаление — High; изменения `serviceBindingInformation` — High.
 
 ---
+
+<a id="ipsec-classes"></a>
 
 ## ipsec-классы
 
@@ -783,6 +810,8 @@ with Advanced Security; AD-классы остаются для совмести
 **Detection.** Любые изменения — High; в большинстве доменов классы статичны.
 
 ---
+
+<a id="wifi-policy-classes"></a>
 
 ## Wi-Fi Group Policy классы
 
@@ -853,7 +882,7 @@ High; одиночные изменения — Medium.
 | **Silver Ticket**                                | Forge ST к конкретному сервису, подписанный NT-hash сервисной учётки.                                                                                                                    |
 | **Trust Ticket / Inter-Realm Forge**             | Forge inter-realm TGT через TDO trust key из `trustAuthIncoming/Outgoing`.                                                                                                               |
 | **Kerberoasting**                                | Запрос ST для SPN-носителя ⇒ offline-перебор пароля сервисной учётки (RC4-HMAC / AES).                                                                                                   |
-| **AS-REP roasting**                              | Запрос AS-REP для учётки с `DONT_REQUE_PREAUTH` ⇒ offline-перебор.                                                                                                                       |
+| **AS-REP roasting**                              | Запрос AS-REP для учётки с `DONT_REQUIRE_PREAUTH` ⇒ offline-перебор.                                                                                                                     |
 | **Unconstrained delegation**                     | `TRUSTED_FOR_DELEGATION` UAC; пользовательский TGT попадает на сервер ⇒ extract & reuse.                                                                                                 |
 | **Constrained delegation (S4U2Proxy)**           | `msDS-AllowedToDelegateTo`: сервис может запросить ST к target-SPN от имени любого user (классический S4U2Proxy без protocol transition или с ним при `TRUSTED_TO_AUTH_FOR_DELEGATION`). |
 | **RBCD (Resource-Based Constrained Delegation)** | `msDS-AllowedToActOnBehalfOfOtherIdentity` на target — кто записан, может S4U-impersonate любого user (включая DA) к target.                                                             |
@@ -875,7 +904,7 @@ High; одиночные изменения — Medium.
 - [\[MS-DRSR\] Directory Replication Service (DRS) Remote Protocol](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-drsr/f977faaa-673e-4f66-b9bf-48c640241d47)
 - [Securing Privileged Access — tiered model](https://learn.microsoft.com/en-us/security/privileged-access-workstations/privileged-access-access-model)
 - [Protected Users Security Group](https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group)
-- [AdminSDHolder, Protected Groups and SDPROP](<https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/dd220680(v=ws.10)>)
+- [Appendix C: Protected Accounts and Groups in Active Directory](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory)
 - [MITRE ATT&CK: Active Directory tactics](https://attack.mitre.org/)
 - [Windows LAPS overview](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview)
 - [Kerberos Constrained Delegation Overview](https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview)
