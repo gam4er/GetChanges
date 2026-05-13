@@ -67,7 +67,8 @@ There is no top-level test runner. Unit tests live under the `SharpHoundCommon` 
 When making non-trivial changes to GCNet, update the following alongside the code:
 
 - `AGENTS.md` (this file) — keep build/run instructions accurate.
-- `README.md` — update architecture description and deep links if file paths or line numbers shift materially.
+- `README.md` — update architecture description and deep links if file paths or line numbers shift materially. **`README.md` is the source of truth.**
+- `README_rus.md` — Russian translation of `README.md`. Whenever `README.md` is edited, mirror the same changes (sections, deep links, line numbers, code blocks) into `README_rus.md` in the same commit. Do not let the two files drift.
 
 ## Commit & Pull Request Guidelines
 

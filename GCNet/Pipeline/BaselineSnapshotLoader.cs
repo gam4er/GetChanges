@@ -50,8 +50,10 @@ namespace GCNet
                 {
                     var guid = _entryParser.ReadObjectGuid(entry);
                     var objectKey = ObjectKeyBuilder.BuildObjectKey(guid, entry.DistinguishedName);
-
                     var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    /*
+                     * долго парсит
+                     */
                     var properties = _entryParser.ParseEntryAsync(entry, new System.Threading.CancellationToken()).Result;
                     foreach (var attr in trackedAttributes)
                     {
