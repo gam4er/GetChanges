@@ -36,6 +36,12 @@ msbuild GetChanges.sln /p:Configuration=Release /v:minimal
 # Запуск
 GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local"
 GCNet\bin\Release\GCNet.exe --help
+
+# Отслеживать изменения только DACL/Owner/Group для всех объектов
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local" --track-nt-security-descriptor
+
+# Совмещение с другими отслеживаемыми атрибутами (наличие nTSecurityDescriptor в списке неявно включает SD-трекинг)
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "nTSecurityDescriptor,memberOf"
 ```
 
 Нажмите **ENTER** или **CTRL+C**, чтобы остановить мониторинг чисто (кооперативная отмена, затем ограниченные ожидания — см. [`MonitoringLifecycleService`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L24)).
@@ -47,6 +53,7 @@ GCNet\bin\Release\GCNet.exe --help
 - Windows со встроенным рантаймом .NET Framework 4.8.
 - Visual Studio 2022 + MSBuild 17.x (редакция Build Tools тоже подходит).
 - Доменная учётка с правом читать каталог и (если используется `--enrich-metadata`) `msDS-ReplAttributeMetaData`.
+- Для `--track-nt-security-descriptor`: той же учётке нужно право `READ_CONTROL` на отслеживаемые объекты, чтобы прочитать Owner/Group/DACL. SACL намеренно не запрашивается (потребовал бы `SeSecurityPrivilege` и выходит за рамки задачи).
 - Сетевой доступ по LDAP/LDAPS как минимум до одного DC.
 
 ---
@@ -59,7 +66,8 @@ GCNet\bin\Release\GCNet.exe --help
 | --- | --- |
 | `--base-dn <DN>` | Корень поиска. По умолчанию — `defaultNamingContext`. |
 | `--enrich-metadata` | Прикреплять `msDS-ReplAttributeMetaData` к каждому событию. |
-| `--tracked-attributes a,b,c` | Список атрибутов через запятую. Если задан, файл создаётся только при изменении этих атрибутов; на старте загружается базовый снимок. |
+| `--tracked-attributes a,b,c` | Список атрибутов через запятую. Если задан, файл создаётся только при изменении этих атрибутов; на старте загружается базовый снимок. Указание `nTSecurityDescriptor` в этом списке неявно включает `--track-nt-security-descriptor`. |
+| `--track-nt-security-descriptor` | Отслеживать изменения `nTSecurityDescriptor` (Owner \| Group \| DACL). Добавляет `nTSecurityDescriptor` в список запрашиваемых атрибутов и прикладывает `LDAP_SERVER_SD_FLAGS_OID` (`1.2.840.113556.1.4.801`) с маской `Owner \| Group \| Dacl`. Дескриптор хранится в виде SDDL-строки для устойчивого diff. SACL **не** запрашивается. |
 | `--dn-ignore-list <path>` | Файл с подстрочными фильтрами DN (по одному на строку). По умолчанию: `dn-ignore-default.txt`. |
 | `--output-dir <path>` | Каталог для JSON-событий. По умолчанию: `.\output`. |
 | `--phantom-root` | Включает `SearchOption.PhantomRoot` для persistent search. |

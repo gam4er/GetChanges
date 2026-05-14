@@ -11,22 +11,22 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpHoundRPC", "SharpHound
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|Any CPU.Build.0 = Release|Any CPU
-		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x64.ActiveCfg = Debug|x64
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Debug|x64.Build.0 = Debug|x64
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x64.ActiveCfg = Release|x64
+		{4E637AA7-DFAD-4015-90C4-857B51F81366}.Release|x64.Build.0 = Release|x64
+		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Debug|x64.Build.0 = Debug|Any CPU
+		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Release|x64.ActiveCfg = Release|Any CPU
+		{423B8B9B-C184-4AE7-88A9-2B446D17CC71}.Release|x64.Build.0 = Release|Any CPU
+		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Debug|x64.Build.0 = Debug|Any CPU
+		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Release|x64.ActiveCfg = Release|Any CPU
+		{C4A26CB4-E46E-4C17-AF63-DF77717F609F}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

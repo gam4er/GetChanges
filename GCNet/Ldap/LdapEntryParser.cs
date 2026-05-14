@@ -102,6 +102,22 @@ namespace GCNet
                 AppConsole.WriteException(ex, "msexchmailboxsecuritydescriptor parsing error");
             }
 
+            try
+            {
+                // Convert nTSecurityDescriptor binary blob to SDDL string for stable diffing.
+                // Sections must match the request mask (Owner|Group|DACL); SACL is intentionally excluded.
+                if (entry.Attributes.Contains("nTSecurityDescriptor"))
+                {
+                    var rawSecurityDescriptor = new RawSecurityDescriptor((byte[])entry.Attributes["nTSecurityDescriptor"][0], 0);
+                    properties["nTSecurityDescriptor"] = rawSecurityDescriptor.GetSddlForm(
+                        AccessControlSections.Owner | AccessControlSections.Group | AccessControlSections.Access);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppConsole.WriteException(ex, "nTSecurityDescriptor parsing error");
+            }
+
             properties.Remove("thumbnailphoto");
             var pwdLastSetKey = properties.Keys.FirstOrDefault(k => string.Equals(k, "pwdLastSet", StringComparison.OrdinalIgnoreCase));
             if (pwdLastSetKey != null)

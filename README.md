@@ -36,6 +36,12 @@ msbuild GetChanges.sln /p:Configuration=Release /v:minimal
 # Run
 GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local"
 GCNet\bin\Release\GCNet.exe --help
+
+# Track only DACL/Owner/Group changes on every object
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local" --track-nt-security-descriptor
+
+# Combine with other tracked attributes (nTSecurityDescriptor in the list implicitly enables SD tracking)
+GCNet\bin\Release\GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "nTSecurityDescriptor,memberOf"
 ```
 
 Press **ENTER** or **CTRL+C** to stop the monitor cleanly (cooperative cancellation, then bounded waits — see [`MonitoringLifecycleService`](https://github.com/gam4er/GetChanges/blob/framework/GCNet/Hosting/MonitoringLifecycleService.cs#L24)).
@@ -47,6 +53,7 @@ Press **ENTER** or **CTRL+C** to stop the monitor cleanly (cooperative cancellat
 - Windows with .NET Framework 4.8 runtime present.
 - Visual Studio 2022 + MSBuild 17.x (Build Tools edition is fine).
 - Domain-joined account with permission to read directory data and (if `--enrich-metadata`) `msDS-ReplAttributeMetaData`.
+- For `--track-nt-security-descriptor`: the same account needs `READ_CONTROL` on monitored objects to read Owner/Group/DACL. SACL is intentionally excluded (would require `SeSecurityPrivilege` and is out of scope).
 - Outbound LDAP/LDAPS reachability to at least one DC.
 
 ---
@@ -59,7 +66,8 @@ All options are defined in [`Hosting/Options.cs`](https://github.com/gam4er/GetC
 | --- | --- |
 | `--base-dn <DN>` | Search root. Defaults to `defaultNamingContext`. |
 | `--enrich-metadata` | Attach `msDS-ReplAttributeMetaData` to each event. |
-| `--tracked-attributes a,b,c` | Comma-separated attribute list. When set, only changes affecting these attributes produce a file; baseline snapshot is loaded at startup. |
+| `--tracked-attributes a,b,c` | Comma-separated attribute list. When set, only changes affecting these attributes produce a file; baseline snapshot is loaded at startup. Specifying `nTSecurityDescriptor` here implicitly enables `--track-nt-security-descriptor`. |
+| `--track-nt-security-descriptor` | Track changes of `nTSecurityDescriptor` (Owner \| Group \| DACL). Adds `nTSecurityDescriptor` to the request attribute list and attaches `LDAP_SERVER_SD_FLAGS_OID` (`1.2.840.113556.1.4.801`) with mask `Owner \| Group \| Dacl`. The descriptor is stored as an SDDL string for stable diffing. SACL is **not** requested. |
 | `--dn-ignore-list <path>` | File with substring DN filters (one per line). Default: `dn-ignore-default.txt`. |
 | `--output-dir <path>` | Directory for JSON event files. Default: `.\output`. |
 | `--phantom-root` | Enable LDAP `SearchOption.PhantomRoot` for the persistent search. |

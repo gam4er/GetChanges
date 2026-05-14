@@ -34,12 +34,31 @@ namespace GCNet
             ConcurrentDictionary<string, BaselineEntry> baseline,
             StatusContext statusContext = null)
         {
-            var filter = "(|" + string.Join(string.Empty, trackedAttributes.Select(a => "(" + a + "=*)")) + ")";
+            var trackSecurityDescriptor = trackedAttributes.Contains("nTSecurityDescriptor", StringComparer.OrdinalIgnoreCase);
+
+            // nTSecurityDescriptor is not LDAP-searchable, so it cannot drive a baseline filter.
+            // Build the OR filter from the *other* tracked attributes; if SD is the only tracked
+            // attribute, fall back to a full-tree scan (every securable object has nTSecurityDescriptor).
+            // Memory is bounded by SecurityDescriptorFlagControl(Owner|Group|DACL, no SACL) and the x64 heap.
+            var searchableAttributes = trackedAttributes
+                .Where(a => !string.Equals(a, "nTSecurityDescriptor", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var filter = searchableAttributes.Count == 0
+                ? "(objectClass=*)"
+                : "(|" + string.Join(string.Empty, searchableAttributes.Select(a => "(" + a + "=*)")) + ")";
+
             var attributes = new List<string> { "objectGUID", "distinguishedName" };
             attributes.AddRange(trackedAttributes);
             var request = new SearchRequest(baseDn, filter, SearchScope.Subtree, attributes.ToArray());
             request.Controls.Add(new PageResultRequestControl(1000));
             request.Controls.Add(new DomainScopeControl());
+
+            if (trackSecurityDescriptor)
+            {
+                // LDAP_SERVER_SD_FLAGS_OID = 1.2.840.113556.1.4.801; mask = Owner | Group | DACL (no SACL).
+                request.Controls.Add(new SecurityDescriptorFlagControl(SecurityMasks.Owner | SecurityMasks.Group | SecurityMasks.Dacl));
+            }
 
             var loadedCount = 0;
 

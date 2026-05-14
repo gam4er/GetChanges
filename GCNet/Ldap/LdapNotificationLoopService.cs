@@ -23,6 +23,7 @@ namespace GCNet
         public BlockingCollection<ChangeEvent> Target { get; set; }
         public IReadOnlyCollection<string> DnIgnoreFilters { get; set; }
         public bool UsePhantomRoot { get; set; }
+        public bool TrackNtSecurityDescriptor { get; set; }
         public Action OnNotificationReceived { get; set; }
 
         /// <summary>
@@ -58,7 +59,7 @@ namespace GCNet
                     AppConsole.Log("connect: creating LDAP notification session");
                     sessionConnection = context.ConnectionFactory();
 
-                    var request = BuildNotificationRequest(context.BaseDn, context.UsePhantomRoot);
+                    var request = BuildNotificationRequest(context.BaseDn, context.UsePhantomRoot, context.TrackNtSecurityDescriptor);
                     subscription = new NotificationSubscription(
                         sessionConnection,
                         request,
@@ -235,13 +236,26 @@ namespace GCNet
             }
         }
 
-        private static SearchRequest BuildNotificationRequest(string baseDn, bool usePhantomRoot)
+        private static SearchRequest BuildNotificationRequest(string baseDn, bool usePhantomRoot, bool trackNtSecurityDescriptor)
         {
-            var request = new SearchRequest(baseDn, "(objectClass=*)", SearchScope.Subtree, null);
+            // When SD tracking is on we explicitly request "*" + nTSecurityDescriptor — the SD attribute
+            // is not returned by default with "*" alone, and a SecurityDescriptorFlagControl restricts
+            // which sections (Owner|Group|DACL) the DC includes in the response.
+            string[] attributes = trackNtSecurityDescriptor
+                ? new[] { "*", "nTSecurityDescriptor" }
+                : null;
+
+            var request = new SearchRequest(baseDn, "(objectClass=*)", SearchScope.Subtree, attributes);
             request.Controls.Add(new DirectoryNotificationControl { IsCritical = true, ServerSide = true });
             request.Controls.Add(new DomainScopeControl());
             request.Controls.Add(new DirectoryControl("1.2.840.113556.1.4.417", null, true, true));
             request.Controls.Add(new DirectoryControl("1.2.840.113556.1.4.2064", null, true, true));
+
+            if (trackNtSecurityDescriptor)
+            {
+                // LDAP_SERVER_SD_FLAGS_OID = 1.2.840.113556.1.4.801; mask = Owner | Group | DACL (no SACL).
+                request.Controls.Add(new SecurityDescriptorFlagControl(SecurityMasks.Owner | SecurityMasks.Group | SecurityMasks.Dacl));
+            }
 
             if (usePhantomRoot)
             {

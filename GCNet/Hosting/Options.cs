@@ -23,6 +23,11 @@ namespace GCNet
         [Description("Comma-separated attribute names. Metadata enrichment is executed only when these attributes are changed.")]
         public string TrackedAttributes { get; set; }
 
+        [CommandOption("--track-nt-security-descriptor")]
+        [Description("Track changes of nTSecurityDescriptor (Owner|Group|DACL). Implicitly enabled when --tracked-attributes contains nTSecurityDescriptor.")]
+        [DefaultValue(false)]
+        public bool TrackNtSecurityDescriptor { get; set; }
+
         [CommandOption("--dn-ignore-list")]
         [Description("Path to a file with DN filters to ignore (one per line).")]
         [DefaultValue(DefaultDnIgnoreListPath)]

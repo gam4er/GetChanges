@@ -52,6 +52,19 @@ namespace GCNet
                 AppConsole.Log("Loaded DN ignore filters: " + dnIgnoreFilters.Count + " from " + options.DnIgnoreListPath);
 
                 var trackedAttributes = ParseTrackedAttributes(options.TrackedAttributes);
+                var sdTrack = options.TrackNtSecurityDescriptor
+                    || trackedAttributes.Contains("nTSecurityDescriptor", StringComparer.OrdinalIgnoreCase);
+                if (sdTrack && !trackedAttributes.Contains("nTSecurityDescriptor", StringComparer.OrdinalIgnoreCase))
+                {
+                    trackedAttributes.Add("nTSecurityDescriptor");
+                }
+
+                if (sdTrack)
+                {
+                    AppConsole.Log("nTSecurityDescriptor tracking is ENABLED (Owner|Group|DACL). "
+                        + "Tracked attributes: " + string.Join(",", trackedAttributes));
+                }
+
                 if (trackedAttributes.Count > 0)
                 {
                     _baselineSnapshotLoader.LoadInitialSnapshot(connection, baseDn, trackedAttributes, _baseline, _statusContext);
@@ -67,7 +80,7 @@ namespace GCNet
                     // Notification loop owns reconnect with capped exponential backoff + jitter,
                     // so the host starts it once and lets the loop self-heal transient LDAP failures.
                     var notificationLoopTask = _notificationLoopService.RunAsync(
-                        BuildNotificationLoopContext(baseDn, connectionFactory, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot),
+                        BuildNotificationLoopContext(baseDn, connectionFactory, pipeline.Incoming, dnIgnoreFilters, options.UsePhantomRoot, sdTrack),
                         lifecycle.Token);
 
                     lifecycle.WaitForStopSignal();
@@ -90,7 +103,8 @@ namespace GCNet
             Func<LdapConnection> connectionFactory,
             BlockingCollection<ChangeEvent> incoming,
             IReadOnlyCollection<string> dnIgnoreFilters,
-            bool usePhantomRoot)
+            bool usePhantomRoot,
+            bool trackNtSecurityDescriptor)
         {
             return new NotificationLoopContext
             {
@@ -99,6 +113,7 @@ namespace GCNet
                 Target = incoming,
                 DnIgnoreFilters = dnIgnoreFilters,
                 UsePhantomRoot = usePhantomRoot,
+                TrackNtSecurityDescriptor = trackNtSecurityDescriptor,
                 OnNotificationReceived = OnNotificationReceived,
                 // Wired so each reconnect attempt forces fresh DC discovery (handles a sick DC scenario).
                 OnBeforeReconnect = _connectionFactory.ResetCachedDomainController

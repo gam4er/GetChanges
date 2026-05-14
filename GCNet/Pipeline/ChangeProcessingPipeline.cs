@@ -118,6 +118,8 @@ namespace GCNet
 
                 // <attr>_old/<attr>_new are emitted only on real change so downstream systems can distinguish
                 // "attribute present" from "attribute transitioned" without re-diffing full object payloads.
+                // Remove the bare attribute key (set by the LDAP entry parser) to avoid duplication with _new.
+                properties.Remove(attribute);
                 properties[attribute + "_old"] = DeserializeCanonical(previousValue);
                 properties[attribute + "_new"] = DeserializeCanonical(currentValue);
             }
