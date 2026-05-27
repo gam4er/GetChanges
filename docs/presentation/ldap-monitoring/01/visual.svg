@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f6f8fb"/>
+  <text x="70" y="86" font-family="Segoe UI, Arial" font-size="42" font-weight="700" fill="#172033">LDAP is the AD control plane</text>
+  <text x="72" y="126" font-family="Segoe UI, Arial" font-size="20" fill="#526071">Identity changes become security facts when they are observed as events.</text>
+  <circle cx="640" cy="360" r="120" fill="#244c7a"/>
+  <circle cx="640" cy="360" r="86" fill="#2f7ea3"/>
+  <text x="640" y="345" text-anchor="middle" font-family="Segoe UI, Arial" font-size="30" font-weight="700" fill="#ffffff">AD DS</text>
+  <text x="640" y="380" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" fill="#e6f4ff">LDAP</text>
+  <g font-family="Segoe UI, Arial" font-size="21" font-weight="600" fill="#172033">
+    <rect x="170" y="230" width="190" height="64" rx="10" fill="#d7ecf2" stroke="#2f7ea3"/>
+    <text x="265" y="270" text-anchor="middle">Groups</text>
+    <rect x="180" y="430" width="190" height="64" rx="10" fill="#fde8c8" stroke="#d18a22"/>
+    <text x="275" y="470" text-anchor="middle">ACLs</text>
+    <rect x="910" y="225" width="190" height="64" rx="10" fill="#e7e1f4" stroke="#7357a3"/>
+    <text x="1005" y="265" text-anchor="middle">GPOs</text>
+    <rect x="920" y="430" width="190" height="64" rx="10" fill="#dff0d9" stroke="#4d8f51"/>
+    <text x="1015" y="470" text-anchor="middle">Certificates</text>
+    <rect x="545" y="585" width="190" height="64" rx="10" fill="#f6d6d6" stroke="#b64f4f"/>
+    <text x="640" y="625" text-anchor="middle">Trusts</text>
+  </g>
+  <g stroke="#7d8795" stroke-width="3" fill="none" marker-end="url(#arrow)">
+    <path d="M360 262 C435 265 500 300 535 325"/>
+    <path d="M370 462 C450 452 505 420 535 392"/>
+    <path d="M910 258 C830 262 780 300 745 325"/>
+    <path d="M920 462 C830 455 780 420 745 392"/>
+    <path d="M640 585 L640 485"/>
+    <path d="M640 240 L640 168 L1020 168"/>
+  </g>
+  <rect x="1020" y="132" width="190" height="72" rx="12" fill="#203040"/>
+  <text x="1115" y="162" text-anchor="middle" font-family="Segoe UI, Arial" font-size="19" font-weight="700" fill="#ffffff">Observable</text>
+  <text x="1115" y="188" text-anchor="middle" font-family="Segoe UI, Arial" font-size="19" fill="#ffffff">change events</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7d8795"/></marker></defs>
+</svg>

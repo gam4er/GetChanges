@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f8f9fc"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#182333">Code keypoint: subscription</text>
+  <g font-family="Consolas, Segoe UI, monospace" font-size="23" fill="#182333">
+    <rect x="90" y="160" width="500" height="390" rx="12" fill="#ffffff" stroke="#98a3b3" stroke-width="2"/>
+    <text x="125" y="215">SearchRequest(baseDn,</text>
+    <text x="125" y="252">  "(objectClass=*)",</text>
+    <text x="125" y="289">  SearchScope.Subtree)</text>
+    <text x="125" y="350">+ DirectoryNotificationControl</text>
+    <text x="125" y="387">+ DomainScopeControl</text>
+    <text x="125" y="424">+ ShowDeleted / ShowRecycled</text>
+    <text x="125" y="461">+ optional SD flags</text>
+  </g>
+  <rect x="690" y="175" width="420" height="110" rx="12" fill="#e8f0ff" stroke="#3267a5" stroke-width="2"/>
+  <text x="900" y="220" text-anchor="middle" font-family="Segoe UI, Arial" font-size="26" font-weight="700" fill="#182333">BeginSendRequest</text>
+  <text x="900" y="255" text-anchor="middle" font-family="Segoe UI, Arial" font-size="20" fill="#182333">ReturnPartialResultsAndNotifyCallback</text>
+  <rect x="690" y="370" width="420" height="110" rx="12" fill="#e7f5e8" stroke="#448c50" stroke-width="2"/>
+  <text x="900" y="416" text-anchor="middle" font-family="Segoe UI, Arial" font-size="26" font-weight="700" fill="#182333">OnPartialResults</text>
+  <text x="900" y="451" text-anchor="middle" font-family="Segoe UI, Arial" font-size="20" fill="#182333">filter DN, parse, enqueue</text>
+  <path d="M590 350 C650 300 650 250 690 230" stroke="#7b8593" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <path d="M900 285 V370" stroke="#7b8593" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="640" y="625" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#182333">The LDAP message stays open; changed entries arrive as partial results.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7b8593"/></marker></defs>
+</svg>

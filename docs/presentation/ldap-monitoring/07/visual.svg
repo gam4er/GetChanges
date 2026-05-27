@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f7f8f7"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#1c2630">Repository shape</text>
+  <g font-family="Consolas, Segoe UI, monospace" font-size="24" fill="#1c2630">
+    <rect x="85" y="155" width="335" height="410" rx="14" fill="#ffffff" stroke="#9aa4ad" stroke-width="2"/>
+    <text x="125" y="205" font-weight="700">GetChanges.sln</text>
+    <text x="125" y="255">GCNet/</text>
+    <text x="155" y="295">Hosting/</text>
+    <text x="155" y="335">Ldap/</text>
+    <text x="155" y="375">Pipeline/</text>
+    <text x="155" y="415">Models/</text>
+    <text x="155" y="455">Output/</text>
+    <text x="125" y="510">SharpHoundCommon/</text>
+  </g>
+  <g font-family="Segoe UI, Arial" fill="#1c2630">
+    <rect x="505" y="175" width="260" height="100" rx="12" fill="#e7f0ff" stroke="#3867a6" stroke-width="2"/>
+    <text x="635" y="218" text-anchor="middle" font-size="24" font-weight="700">.NET Framework 4.8</text><text x="635" y="248" text-anchor="middle" font-size="18">framework branch</text>
+    <rect x="850" y="175" width="300" height="100" rx="12" fill="#e8f5e8" stroke="#448c50" stroke-width="2"/>
+    <text x="1000" y="218" text-anchor="middle" font-size="24" font-weight="700">SharpHoundCommon</text><text x="1000" y="248" text-anchor="middle" font-size="18">net472 submodule</text>
+    <rect x="505" y="355" width="645" height="130" rx="12" fill="#fff1d8" stroke="#d0882b" stroke-width="2"/>
+    <text x="827" y="405" text-anchor="middle" font-size="24" font-weight="700">Explicit project file registration</text>
+    <text x="827" y="445" text-anchor="middle" font-size="20">classic packages.config, MSBuild, Costura/Fody</text>
+  </g>
+  <path d="M420 350 H505" stroke="#9aa4ad" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M420 510 C585 590 855 565 1000 485" stroke="#9aa4ad" stroke-width="4" fill="none" marker-end="url(#arrow)"/>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#9aa4ad"/></marker></defs>
+</svg>

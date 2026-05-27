@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f6f9fb"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#172433">Method B: sync and replica semantics</text>
+  <g font-family="Segoe UI, Arial" fill="#172433">
+    <rect x="105" y="210" width="250" height="190" rx="14" fill="#e7f0ff" stroke="#2c63a0" stroke-width="3"/>
+    <text x="230" y="285" text-anchor="middle" font-size="30" font-weight="700">LDAP server</text>
+    <text x="230" y="325" text-anchor="middle" font-size="21">changed objects</text>
+    <rect x="925" y="210" width="250" height="190" rx="14" fill="#e5f3e8" stroke="#43854a" stroke-width="3"/>
+    <text x="1050" y="285" text-anchor="middle" font-size="30" font-weight="700">Consumer</text>
+    <text x="1050" y="325" text-anchor="middle" font-size="21">local state</text>
+    <rect x="505" y="205" width="270" height="200" rx="14" fill="#fff2d5" stroke="#d28a24" stroke-width="3"/>
+    <text x="640" y="270" text-anchor="middle" font-size="28" font-weight="700">Sync control</text>
+    <text x="640" y="310" text-anchor="middle" font-size="21">cookie</text>
+    <text x="640" y="343" text-anchor="middle" font-size="21">refreshOnly</text>
+    <text x="640" y="376" text-anchor="middle" font-size="21">refreshAndPersist</text>
+  </g>
+  <path d="M355 300 H505" stroke="#2c63a0" stroke-width="5" marker-end="url(#blue)"/>
+  <path d="M775 300 H925" stroke="#43854a" stroke-width="5" marker-end="url(#green)"/>
+  <path d="M940 425 C780 535 505 535 340 425" stroke="#8c6a2c" stroke-width="4" fill="none" marker-end="url(#gold)"/>
+  <text x="640" y="522" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#172433">Stateful and precise, but operationally heavier.</text>
+  <text x="640" y="560" text-anchor="middle" font-family="Segoe UI, Arial" font-size="21" fill="#53616e">Great for maintaining a replica. Less tiny when the SOC only needs high-value deltas.</text>
+  <defs><marker id="blue" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2c63a0"/></marker><marker id="green" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#43854a"/></marker><marker id="gold" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#8c6a2c"/></marker></defs>
+</svg>

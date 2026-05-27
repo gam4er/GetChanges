@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#faf9f6"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#1c2630">Telemetry semantics</text>
+  <rect x="100" y="175" width="455" height="335" rx="12" fill="#ffffff" stroke="#9aa4ad" stroke-width="2"/>
+  <text x="130" y="225" font-family="Consolas, Segoe UI, monospace" font-size="22" fill="#1c2630">baseline[objectGUID]</text>
+  <text x="130" y="275" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#356aa5">member = ["A"]</text>
+  <text x="130" y="315" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#356aa5">nTSecurityDescriptor = "O:..."</text>
+  <text x="130" y="355" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#356aa5">servicePrincipalName = null</text>
+  <rect x="725" y="175" width="455" height="335" rx="12" fill="#ffffff" stroke="#9aa4ad" stroke-width="2"/>
+  <text x="755" y="225" font-family="Consolas, Segoe UI, monospace" font-size="22" fill="#1c2630">event properties</text>
+  <text x="755" y="275" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#bd5146">member_old: ["A"]</text>
+  <text x="755" y="315" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#448c50">member_new: ["A", "B"]</text>
+  <text x="755" y="355" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#7354a8">timestamp: 1710000000</text>
+  <text x="755" y="395" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#7354a8">distinguishedName: CN=...</text>
+  <path d="M555 340 H725" stroke="#d0882b" stroke-width="5" marker-end="url(#arrow)"/>
+  <text x="640" y="565" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#1c2630">Canonical JSON diff turns LDAP noise into SOC-ready old/new facts.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#d0882b"/></marker></defs>
+</svg>

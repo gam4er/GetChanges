@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f7f9fb"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#172431">Demo path</text>
+  <g font-family="Segoe UI, Arial" fill="#172431" font-size="20">
+    <rect x="90" y="210" width="210" height="110" rx="12" fill="#e8f0ff" stroke="#356aa5" stroke-width="2"/>
+    <text x="195" y="252" text-anchor="middle" font-weight="700">Run monitor</text><text x="195" y="286" text-anchor="middle">--base-dn</text>
+    <rect x="390" y="210" width="210" height="110" rx="12" fill="#fff1d8" stroke="#cf8626" stroke-width="2"/>
+    <text x="495" y="252" text-anchor="middle" font-weight="700">Change object</text><text x="495" y="286" text-anchor="middle">group, ACL, SPN</text>
+    <rect x="690" y="210" width="210" height="110" rx="12" fill="#e8f5e8" stroke="#448c50" stroke-width="2"/>
+    <text x="795" y="252" text-anchor="middle" font-weight="700">JSON event</text><text x="795" y="286" text-anchor="middle">old/new facts</text>
+    <rect x="990" y="210" width="210" height="110" rx="12" fill="#f1e8fb" stroke="#7354a8" stroke-width="2"/>
+    <text x="1095" y="252" text-anchor="middle" font-weight="700">SOC story</text><text x="1095" y="286" text-anchor="middle">alert, hunt, graph</text>
+  </g>
+  <g stroke="#7d8793" stroke-width="4" marker-end="url(#arrow)"><path d="M300 265 H390"/><path d="M600 265 H690"/><path d="M900 265 H990"/></g>
+  <rect x="210" y="435" width="860" height="115" rx="14" fill="#203447"/>
+  <text x="640" y="482" text-anchor="middle" font-family="Consolas, Segoe UI, monospace" font-size="22" fill="#ffffff">GCNet.exe --base-dn "DC=corp,DC=local" --tracked-attributes "member,nTSecurityDescriptor"</text>
+  <text x="640" y="525" text-anchor="middle" font-family="Segoe UI, Arial" font-size="22" fill="#d6e8f3">End with a live JSON artifact, not a theoretical diagram.</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7d8793"/></marker></defs>
+</svg>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f7f9f7"/>
+  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#1e2a34">Why SOCs miss identity drift</text>
+  <g font-family="Segoe UI, Arial" font-size="22" fill="#1e2a34">
+    <rect x="95" y="170" width="260" height="110" rx="10" fill="#e6eef9" stroke="#326da8" stroke-width="2"/>
+    <text x="225" y="220" text-anchor="middle" font-weight="700">DC event logs</text><text x="225" y="252" text-anchor="middle">fragmented by host</text>
+    <rect x="95" y="340" width="260" height="110" rx="10" fill="#fff0d9" stroke="#d08421" stroke-width="2"/>
+    <text x="225" y="390" text-anchor="middle" font-weight="700">Audit policy</text><text x="225" y="422" text-anchor="middle">coverage varies</text>
+    <rect x="95" y="510" width="260" height="110" rx="10" fill="#f1e6fa" stroke="#7452a7" stroke-width="2"/>
+    <text x="225" y="560" text-anchor="middle" font-weight="700">Tool snapshots</text><text x="225" y="592" text-anchor="middle">late evidence</text>
+  </g>
+  <g stroke="#8c96a3" stroke-width="4" fill="none" marker-end="url(#arrow)">
+    <path d="M355 225 C475 235 515 300 595 335"/>
+    <path d="M355 395 C470 395 520 370 595 365"/>
+    <path d="M355 565 C475 550 520 430 595 390"/>
+  </g>
+  <rect x="595" y="275" width="290" height="150" rx="14" fill="#233444"/>
+  <text x="740" y="330" text-anchor="middle" font-family="Segoe UI, Arial" font-size="28" font-weight="700" fill="#ffffff">LDAP state</text>
+  <text x="740" y="368" text-anchor="middle" font-family="Segoe UI, Arial" font-size="22" fill="#d9edf7">one source of truth</text>
+  <path d="M885 350 H1050" stroke="#2b8a6f" stroke-width="5" fill="none" marker-end="url(#greenarrow)"/>
+  <rect x="1050" y="290" width="160" height="120" rx="12" fill="#dff4ea" stroke="#2b8a6f" stroke-width="2"/>
+  <text x="1130" y="342" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#1e2a34">SIEM</text>
+  <text x="1130" y="374" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" fill="#1e2a34">timely context</text>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#8c96a3"/></marker><marker id="greenarrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#2b8a6f"/></marker></defs>
+</svg>
