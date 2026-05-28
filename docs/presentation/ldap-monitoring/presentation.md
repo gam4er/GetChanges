@@ -144,7 +144,8 @@ Generated locally: [04/visual.svg](04/visual.svg)
 - Synchronization APIs track changes since a previous state.
 - RFC4533 uses cookies and refresh modes for LDAP content sync.
 - Microsoft DirSync uses OID `1.2.840.113556.1.4.841`.
-- Strong statefulness, higher implementation and operations cost.
+- Stateful and precise, but operationally heavier.
+- Great for maintaining a replica; less tiny when the SOC only needs high-value deltas.
 
 ### Speaker Transcript (RU)
 
@@ -239,28 +240,33 @@ Generated locally: [07/visual.svg](07/visual.svg)
 ### Slide Text
 
 - Connection factory selects and binds to a DC.
-- Optional baseline snapshot loads tracked attributes.
-- Notification loop feeds an incoming queue.
-- Change pipeline filters, enriches, and emits JSON-ready events.
-- File writer serializes one event per JSON file.
+- Optional baseline snapshot loads tracked attributes for comparison.
+- Notification loop enqueues lightweight `ChangeEvent` items to `incoming`.
+- Change pipeline consumes `incoming`, filters, diffs, enriches, and emits JSON-ready items to `outgoing`.
+- Event writer consumes `outgoing`; disk writes happen off the LDAP callback path.
 
 ### Speaker Transcript (RU)
 
-Архитектура PoC намеренно небольшая. `ChangeMonitorApplication` валидирует options, выбирает base DN, загружает ignore list, при необходимости делает baseline snapshot, потом запускает pipeline, writer и notification loop. Notification loop кладет `ChangeEvent` во входящую очередь. Pipeline решает, нужно ли писать событие, добавляет diff и metadata enrichment. Writer сохраняет результат отдельным JSON-файлом.
+Архитектура PoC намеренно небольшая. `ChangeMonitorApplication` валидирует options, выбирает base DN, загружает ignore list, при необходимости делает baseline snapshot, потом запускает pipeline, writer и notification loop. Notification loop получает LDAP partial results в callback и кладет легковесный `ChangeEvent` в `pipeline.Incoming`; прямой записи на диск на этом пути нет. `ChangeProcessingPipeline.StartAsync` является обработчиком incoming: он читает очередь, решает, нужно ли писать событие, добавляет diff и metadata enrichment, затем кладет JSON-ready словарь в `Outgoing`. `StartWriterLoop` подписан на `pipeline.Outgoing` и только после чтения outgoing вызывает `EventFileWriter.WriteEvent`, где создается JSON-файл.
 
 ### Speaker Transcript (EN)
 
-The PoC architecture is intentionally small. `ChangeMonitorApplication` validates options, resolves the base DN, loads the ignore list, optionally loads the baseline snapshot, then starts the pipeline, writer, and notification loop. The notification loop adds `ChangeEvent` items to the incoming queue. The pipeline decides whether the event should be written, adds diffs and metadata enrichment, and the writer stores one JSON file per qualified event.
+The PoC architecture is intentionally small. `ChangeMonitorApplication` validates options, resolves the base DN, loads the ignore list, optionally loads the baseline snapshot, then starts the pipeline, writer, and notification loop. The notification loop receives LDAP partial results in the callback and enqueues lightweight `ChangeEvent` items into `pipeline.Incoming`; it does not write files directly. `ChangeProcessingPipeline.StartAsync` handles incoming items, decides whether an event should be written, adds diffs and metadata enrichment, then enqueues a JSON-ready dictionary to `Outgoing`. `StartWriterLoop` subscribes to `pipeline.Outgoing` and only then calls `EventFileWriter.WriteEvent`, where the JSON file is created.
 
 ### Visual
 
 Generated locally: [08/visual.svg](08/visual.svg)
 
+MCP/SVG Maker alternative: [08/visual_mcp.svg](08/visual_mcp.svg)
+
 ### Sources
 
 - Orchestrator flow: [GCNet/Hosting/ChangeMonitorApplication.cs](../../../GCNet/Hosting/ChangeMonitorApplication.cs#L41)
 - Pipeline startup: [GCNet/Hosting/ChangeMonitorApplication.cs](../../../GCNet/Hosting/ChangeMonitorApplication.cs#L81)
+- Notification enqueue: [GCNet/Ldap/LdapNotificationLoopService.cs](../../../GCNet/Ldap/LdapNotificationLoopService.cs#L186)
+- Pipeline queues: [GCNet/Pipeline/ChangeProcessingPipeline.cs](../../../GCNet/Pipeline/ChangeProcessingPipeline.cs#L27)
 - Writer loop: [GCNet/Hosting/ChangeMonitorApplication.cs](../../../GCNet/Hosting/ChangeMonitorApplication.cs#L122)
+- JSON writer: [GCNet/Output/EventFileWriter.cs](../../../GCNet/Output/EventFileWriter.cs#L29)
 
 ---
 
@@ -303,29 +309,35 @@ Generated locally: [09/visual.svg](09/visual.svg)
 
 ### Slide Text
 
-- `LdapEntryParser` wraps `SearchResultEntry` for SharpHoundCommon.
-- `LdapPropertyProcessor` parses common AD properties.
-- User properties are read with current-domain context.
-- Certificates and security descriptors are normalized for stable JSON.
-- This keeps output close to BloodHound-oriented semantics.
+- GCNet receives `SearchResultEntry` and enters `LdapEntryParser.ParseEntryAsync`.
+- `SearchResultEntryWrapper` adapts the entry for SharpHoundCommon.
+- `LdapPropertyProcessor` decodes core AD properties and user properties.
+- GCNet resumes with certificate parsing, SDDL conversion, cleanup, and metadata fields.
+- The final property bag becomes `ChangeEvent.Properties` and later a JSON file.
 
 ### Speaker Transcript (RU)
 
-Здесь ценность submodule особенно заметна. Вместо того чтобы заново писать AD parser, `LdapEntryParser` оборачивает `SearchResultEntry` в `SearchResultEntryWrapper` и передает его в `LdapPropertyProcessor`. Затем он добавляет user properties, сертификаты, security descriptors и служебные поля вроде distinguishedName и timestamp. Для `nTSecurityDescriptor` бинарный blob превращается в SDDL, что важно для стабильного diff. Это не означает прямой импорт в BloodHound, но означает совместимую модель нормализации.
+Здесь ценность submodule особенно заметна, но важно показать границу ответственности. Сначала код GCNet в `OnPartialResults` получает `SearchResultEntry`, применяет DN-фильтр и вызывает `LdapEntryParser.ParseEntryAsync`. Внутри parser создается `SearchResultEntryWrapper`, и дальше объект уже читается кодом SharpHoundCommon через `LdapPropertyProcessor`: `ParseAllProperties` и `ReadUserProperties` декодируют AD-свойства, UAC-флаги, timestamps, SID/GUID и user-контекст. После этого управление возвращается в GCNet: словарь дополняется сертификатами, SDDL для security descriptors, cleanup-полями, `distinguishedName` и `timestamp`. Финальный `Dictionary<string, object>` становится `ChangeEvent.Properties`, проходит pipeline и в итоге записывается как JSON-файл.
 
 ### Speaker Transcript (EN)
 
-This is where the submodule pays off. Instead of writing another AD parser, `LdapEntryParser` wraps `SearchResultEntry` in `SearchResultEntryWrapper` and passes it to `LdapPropertyProcessor`. It then adds user properties, certificates, security descriptors, and metadata fields such as distinguishedName and timestamp. For `nTSecurityDescriptor`, the binary blob becomes SDDL, which is important for stable diffing. This does not mean direct BloodHound import, but it does mean compatible normalization semantics.
+This is where the submodule pays off, but the ownership boundary matters. First, GCNet code in `OnPartialResults` receives a `SearchResultEntry`, applies the DN filter, and calls `LdapEntryParser.ParseEntryAsync`. Inside the parser, the entry becomes a `SearchResultEntryWrapper`, and SharpHoundCommon reads it through `LdapPropertyProcessor`: `ParseAllProperties` and `ReadUserProperties` decode AD properties, UAC flags, timestamps, SID/GUID values, and user-domain context. Control then returns to GCNet, which adds certificate parsing, SDDL conversion for security descriptors, cleanup fields, `distinguishedName`, and `timestamp`. The final `Dictionary<string, object>` becomes `ChangeEvent.Properties`, flows through the pipeline, and is eventually written as a JSON file.
 
 ### Visual
 
 Generated locally: [10/visual.svg](10/visual.svg)
 
+MCP/SVG Maker alternative: [10/visual_mcp.svg](10/visual_mcp.svg)
+
 ### Sources
 
+- Notification callback: [GCNet/Ldap/LdapNotificationLoopService.cs](../../../GCNet/Ldap/LdapNotificationLoopService.cs#L186)
 - Processor construction: [GCNet/Ldap/LdapEntryParser.cs](../../../GCNet/Ldap/LdapEntryParser.cs#L33)
-- SharpHound property parsing: [GCNet/Ldap/LdapEntryParser.cs](../../../GCNet/Ldap/LdapEntryParser.cs#L56)
-- Security descriptor normalization: [GCNet/Ldap/LdapEntryParser.cs](../../../GCNet/Ldap/LdapEntryParser.cs#L99)
+- GCNet parser boundary: [GCNet/Ldap/LdapEntryParser.cs](../../../GCNet/Ldap/LdapEntryParser.cs#L56)
+- Wrapper adapter: [SharpHoundCommon/src/CommonLib/DirectoryObjects/SearchResultEntryWrapper.cs](../../../SharpHoundCommon/src/CommonLib/DirectoryObjects/SearchResultEntryWrapper.cs#L10)
+- SharpHound property parser: [SharpHoundCommon/src/CommonLib/Processors/LdapPropertyProcessor.cs](../../../SharpHoundCommon/src/CommonLib/Processors/LdapPropertyProcessor.cs#L658)
+- User property parser: [SharpHoundCommon/src/CommonLib/Processors/LdapPropertyProcessor.cs](../../../SharpHoundCommon/src/CommonLib/Processors/LdapPropertyProcessor.cs#L249)
+- JSON writer: [GCNet/Output/EventFileWriter.cs](../../../GCNet/Output/EventFileWriter.cs#L29)
 - SpecterOps: [SharpHound CE](https://bloodhound.specterops.io/collect-data/ce-collection/sharphound)
 
 ---

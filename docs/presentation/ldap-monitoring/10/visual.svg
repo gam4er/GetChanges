@@ -1,21 +1,96 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1190" height="425" viewBox="55 205 1190 425">
-  <rect x="95" y="245" width="210" height="105" rx="12" fill="#e8f0ff" stroke="#356aa5" stroke-width="2"/>
-  <text x="200" y="290" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#172431">LDAP entry</text>
-  <text x="200" y="322" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" fill="#172431">SearchResultEntry</text>
-  <rect x="385" y="245" width="250" height="105" rx="12" fill="#fff1d8" stroke="#cf8626" stroke-width="2"/>
-  <text x="510" y="288" text-anchor="middle" font-family="Segoe UI, Arial" font-size="23" font-weight="700" fill="#172431">Wrapper</text>
-  <text x="510" y="322" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" fill="#172431">SearchResultEntryWrapper</text>
-  <rect x="715" y="245" width="250" height="105" rx="12" fill="#e8f5e8" stroke="#448c50" stroke-width="2"/>
-  <text x="840" y="288" text-anchor="middle" font-family="Segoe UI, Arial" font-size="23" font-weight="700" fill="#172431">Processor</text>
-  <text x="840" y="322" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" fill="#172431">LdapPropertyProcessor</text>
-  <rect x="1035" y="245" width="170" height="105" rx="12" fill="#f1e8fb" stroke="#7354a8" stroke-width="2"/>
-  <text x="1120" y="288" text-anchor="middle" font-family="Segoe UI, Arial" font-size="23" font-weight="700" fill="#172431">JSON</text>
-  <text x="1120" y="322" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18" fill="#172431">property bag</text>
-  <g stroke="#7d8793" stroke-width="4" marker-end="url(#arrow)"><path d="M305 298 H385"/><path d="M635 298 H715"/><path d="M965 298 H1035"/></g>
-  <g font-family="Segoe UI, Arial" font-size="21" fill="#172431">
-    <text x="160" y="465">SID / GUID</text><text x="360" y="465">file-time</text><text x="560" y="465">certificates</text><text x="790" y="465">SDDL</text><text x="970" y="465">domain context</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="40 190 1200 560">
+  <defs>
+    <linearGradient id="cardBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3f8ff"/>
+      <stop offset="1" stop-color="#e3edff"/>
+    </linearGradient>
+    <linearGradient id="cardAmber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff8e7"/>
+      <stop offset="1" stop-color="#ffecc5"/>
+    </linearGradient>
+    <linearGradient id="cardGreen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1faf2"/>
+      <stop offset="1" stop-color="#e1f3e5"/>
+    </linearGradient>
+    <linearGradient id="cardPurple" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f0ff"/>
+      <stop offset="1" stop-color="#eadff9"/>
+    </linearGradient>
+    <filter id="softShadow" x="-8%" y="-10%" width="116%" height="124%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#183040" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#657283"/>
+    </marker>
+    <marker id="amberArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a06c1a"/>
+    </marker>
+  </defs>
+  <g font-family="Segoe UI, Arial" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" fill="#172431">
+    <g id="responsibility-zones">
+      <rect x="60" y="220" width="320" height="455" rx="18" fill="#4f8edc" fill-opacity="0.25" stroke="#2f69a5" stroke-width="2"/>
+      <rect x="410" y="220" width="360" height="455" rx="18" fill="#d7a33a" fill-opacity="0.25" stroke="#cf8626" stroke-width="2"/>
+      <rect x="800" y="220" width="390" height="455" rx="18" fill="#4fae79" fill-opacity="0.25" stroke="#43854a" stroke-width="2"/>
+      <text x="220" y="245" font-size="18" font-weight="700" fill="#244d7c">GCNet project code</text>
+      <text x="590" y="245" font-size="18" font-weight="700" fill="#7c5517">SharpHoundCommon</text>
+      <text x="995" y="245" font-size="18" font-weight="700" fill="#2f6e3a">GCNet post-processing</text>
+    </g>
+    <g filter="url(#softShadow)">
+      <rect x="88" y="275" width="265" height="75" rx="12" fill="url(#cardBlue)" stroke="#3267a5" stroke-width="2"/>
+      <rect x="88" y="385" width="265" height="70" rx="12" fill="url(#cardBlue)" stroke="#3267a5" stroke-width="2"/>
+      <rect x="88" y="495" width="265" height="95" rx="12" fill="url(#cardBlue)" stroke="#3267a5" stroke-width="2"/>
+      <rect x="435" y="275" width="310" height="90" rx="12" fill="url(#cardAmber)" stroke="#cf8626" stroke-width="2"/>
+      <rect x="435" y="405" width="310" height="130" rx="12" fill="url(#cardAmber)" stroke="#cf8626" stroke-width="2"/>
+      <rect x="462" y="575" width="256" height="64" rx="14" fill="#fffdf7" stroke="#cf8626" stroke-width="2"/>
+      <rect x="825" y="265" width="340" height="125" rx="12" fill="url(#cardGreen)" stroke="#448c50" stroke-width="2"/>
+      <rect x="842" y="412" width="306" height="48" rx="24" fill="#fff3d2" stroke="#cf8626" stroke-width="2"/>
+      <rect x="825" y="485" width="340" height="80" rx="12" fill="url(#cardGreen)" stroke="#448c50" stroke-width="2"/>
+      <rect x="882" y="605" width="226" height="58" rx="9" fill="url(#cardPurple)" stroke="#7354a8" stroke-width="2"/>
+    </g>
+    <g font-size="18">
+      <text x="220" y="302" font-weight="700">OnPartialResults</text>
+      <text x="220" y="328" font-size="15" fill="#445468">receives SearchResultEntry</text>
+      <text x="220" y="413" font-weight="700">DN filter</text>
+      <text x="220" y="438" font-size="15" fill="#445468">ShouldIgnoreByDn</text>
+      <text x="220" y="523" font-weight="700">LdapEntryParser</text>
+      <text x="220" y="549" font-size="15" fill="#445468">ParseEntryAsync</text>
+      <text x="220" y="574" font-size="15" fill="#445468">creates wrapper</text>
+
+      <text x="590" y="306" font-weight="700">SearchResultEntryWrapper</text>
+      <text x="590" y="336" font-size="15" fill="#5d4a2c">adapter: IDirectoryObject</text>
+      <text x="590" y="432" font-weight="700">LdapPropertyProcessor</text>
+      <text x="590" y="461" font-size="15" fill="#5d4a2c">ParseAllProperties</text>
+      <text x="590" y="488" font-size="15" fill="#5d4a2c">ReadUserProperties(domain)</text>
+      <text x="590" y="515" font-size="15" fill="#5d4a2c">SID / GUID / UAC / time</text>
+      <text x="590" y="600" font-weight="700">base property bag</text>
+      <text x="590" y="624" font-size="15" fill="#5d4a2c">Dictionary&lt;string, object&gt;</text>
+
+      <text x="995" y="296" font-weight="700">GCNet enriches bag</text>
+      <text x="995" y="324" font-size="15" fill="#445468">merge user props</text>
+      <text x="995" y="349" font-size="15" fill="#445468">certs + security descriptors</text>
+      <text x="995" y="374" font-size="15" fill="#445468">cleanup + timestamp</text>
+      <text x="995" y="436" font-size="15" fill="#7c5517" font-weight="700">helper type: ParsedCertificate</text>
+      <text x="995" y="514" font-weight="700">ChangeEvent.Properties</text>
+      <text x="995" y="542" font-size="15" fill="#445468">pipeline / writer path</text>
+      <text x="995" y="630" font-weight="700">JSON file</text>
+      <text x="995" y="650" font-size="14" fill="#445468">one event per document</text>
+    </g>
   </g>
-  <path d="M140 438 H1130" stroke="#b0b8c2" stroke-width="3"/>
-  <text x="640" y="590" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#172431">GetChanges reuses collection-grade normalization instead of inventing a second parser.</text>
-  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#7d8793"/></marker></defs>
+  <g fill="none" stroke="#657283" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)">
+    <path d="M220 350 V385"/>
+    <path d="M220 455 V495"/>
+    <path d="M353 542 H435"/>
+    <path d="M590 365 V405"/>
+    <path d="M590 535 V575"/>
+    <path d="M718 607 H825 V328"/>
+    <path d="M995 390 V412"/>
+    <path d="M995 460 V485"/>
+    <path d="M995 565 V605"/>
+  </g>
+  <path d="M842 436 H780 V490 H745" fill="none" stroke="#a06c1a" stroke-width="3" stroke-dasharray="8 8" stroke-linecap="round" marker-end="url(#amberArrow)"/>
+  <g font-family="Segoe UI, Arial" font-size="14" font-weight="700" text-anchor="middle" fill="#556474">
+    <text x="397" y="525">handoff</text>
+    <text x="785" y="312">returns base bag</text>
+    <text x="786" y="474" fill="#7c5517">SharpHound helper type</text>
+  </g>
 </svg>

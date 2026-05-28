@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1178" height="568" viewBox="32 84 1178 568">
+  <rect x="110" y="235" width="260" height="175" rx="14" fill="#e8f0ff" stroke="#315f9f" stroke-width="3"/>
+  <text x="240" y="305" text-anchor="middle" font-family="Segoe UI, Arial" font-size="28" font-weight="700" fill="#1b2733">Client</text>
+  <text x="240" y="345" text-anchor="middle" font-family="Segoe UI, Arial" font-size="21" fill="#1b2733">async search</text>
+  <rect x="510" y="195" width="260" height="255" rx="14" fill="#203447"/>
+  <text x="640" y="270" text-anchor="middle" font-family="Segoe UI, Arial" font-size="30" font-weight="700" fill="#ffffff">Domain</text>
+  <text x="640" y="310" text-anchor="middle" font-family="Segoe UI, Arial" font-size="30" font-weight="700" fill="#ffffff">Controller</text>
+  <text x="640" y="360" text-anchor="middle" font-family="Segoe UI, Arial" font-size="21" fill="#d5e7f3">SearchEntry responses</text>
+  <rect x="910" y="235" width="260" height="175" rx="14" fill="#e3f5e9" stroke="#3b874f" stroke-width="3"/>
+  <text x="1040" y="300" text-anchor="middle" font-family="Segoe UI, Arial" font-size="28" font-weight="700" fill="#1b2733">Queue</text>
+  <text x="1040" y="340" text-anchor="middle" font-family="Segoe UI, Arial" font-size="21" fill="#1b2733">change entries</text>
+  <path d="M370 322 H510" stroke="#315f9f" stroke-width="5" marker-end="url(#blue)"/>
+  <path d="M770 322 H910" stroke="#3b874f" stroke-width="5" marker-end="url(#green)"/>
+  <defs>
+	<marker id="blue" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#315f9f"/></marker>
+	<marker id="green" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#3b874f"/></marker>
+  </defs>
+</svg>
