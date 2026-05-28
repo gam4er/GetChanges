@@ -1,6 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#faf9f6"/>
-  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#1c2630">Telemetry semantics</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="470" viewBox="60 135 1160 470">
   <rect x="100" y="175" width="455" height="335" rx="12" fill="#ffffff" stroke="#9aa4ad" stroke-width="2"/>
   <text x="130" y="225" font-family="Consolas, Segoe UI, monospace" font-size="22" fill="#1c2630">baseline[objectGUID]</text>
   <text x="130" y="275" font-family="Consolas, Segoe UI, monospace" font-size="21" fill="#356aa5">member = ["A"]</text>

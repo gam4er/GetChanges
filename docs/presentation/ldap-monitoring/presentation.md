@@ -14,6 +14,8 @@ Assets: each slide has a generated SVG in its numbered folder
 
 ## Slide 01 - LDAP Is the AD Control Plane
 
+Identity changes become security facts when they are observed as events.
+
 ![Slide 01 visual](01/visual.svg)
 
 ### Slide Text
@@ -42,6 +44,8 @@ Generated locally: [01/visual.svg](01/visual.svg)
 ---
 
 ## Slide 02 - Why These Changes Matter
+
+Small directory edits can alter privilege, persistence, and authentication paths.
 
 ![Slide 02 visual](02/visual.svg)
 

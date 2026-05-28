@@ -1,6 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#f6f9fb"/>
-  <text x="70" y="84" font-family="Segoe UI, Arial" font-size="40" font-weight="700" fill="#172433">Method B: sync and replica semantics</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1150" height="435" viewBox="65 165 1150 435">
   <g font-family="Segoe UI, Arial" fill="#172433">
     <rect x="105" y="210" width="250" height="190" rx="14" fill="#e7f0ff" stroke="#2c63a0" stroke-width="3"/>
     <text x="230" y="285" text-anchor="middle" font-size="30" font-weight="700">LDAP server</text>

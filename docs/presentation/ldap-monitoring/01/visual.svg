@@ -1,7 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-  <rect width="1280" height="720" fill="#f6f8fb"/>
-  <text x="70" y="86" font-family="Segoe UI, Arial" font-size="42" font-weight="700" fill="#172033">LDAP is the AD control plane</text>
-  <text x="72" y="126" font-family="Segoe UI, Arial" font-size="20" fill="#526071">Identity changes become security facts when they are observed as events.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="597" viewBox="130 92 1120 597">
   <circle cx="640" cy="360" r="120" fill="#244c7a"/>
   <circle cx="640" cy="360" r="86" fill="#2f7ea3"/>
   <text x="640" y="345" text-anchor="middle" font-family="Segoe UI, Arial" font-size="30" font-weight="700" fill="#ffffff">AD DS</text>
